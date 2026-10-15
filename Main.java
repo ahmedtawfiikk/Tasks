@@ -22,6 +22,10 @@ public class Main {
         manager.listTasks();
         manager.markTaskAsDone(2);
         manager.listTasks();
+
+        Taskfactory taskfactory = new Taskfactory();
+       taskfactory.createBugTask("Fix login bug", Set.of("bug", "urgent"), 4, severity.HIGH);
+       taskfactory.createFeatureTask("Add dark mode", Set.of("feature"), 5, 3.5f);
     }
 }
 
@@ -72,6 +76,9 @@ class Task {
 }
 
 
+
+
+
 interface task {
     void createtask();
 
@@ -82,44 +89,64 @@ enum severity {
     LOW, MEDIUM, HIGH
 }
 
-class BugTask implements task {
+class BugTask extends Task {
     private severity severity;
 
-    public BugTask(severity severity) {
+    
+
+    public BugTask(String title, Set<String> tags, int id, severity severity) {
+        super(title, tags, id);
         this.severity = severity;
     }
 
-    @Override
-    public void createtask() {
-        System.out.println("Bug task created with severity: " + severity);
-        
+
+
+    public severity getSeverity() {
+        return severity;
     }
+
+    
+
 }
 
 
-class FeatureTask implements task {
+class FeatureTask extends Task {
     float estimatedTime = 0.0f;
-    @Override
-    public void createtask() {
-        System.out.println("Feature task created");
-        System.out.println("Estimated time: " + estimatedTime + " hours");
+
+    public FeatureTask(String title, Set<String> tags, int id, float estimatedTime) {
+        super(title, tags, id);
+        this.estimatedTime = estimatedTime;
     }
+
+    public float getEstimatedTime() {
+        return estimatedTime;
+    }
+    
+    
+
 }
 
  class Taskfactory  {
     
-    public task createTask(String type, severity severity) {
-        if (type.equalsIgnoreCase("bug")) {
-            return new BugTask(severity);
-        } else if (type.equalsIgnoreCase("feature")) {
-            return new FeatureTask();
-        } else {
-            throw new IllegalArgumentException("Invalid task type: " + type);
-        }
+    public Task createBugTask(String title, Set<String> tags, int id, severity severity) {
+        return new BugTask(title, tags, id, severity);
+    }
+
+    public Task createFeatureTask(String title, Set<String> tags, int id, float estimatedTime) {
+        return new FeatureTask(title, tags, id, estimatedTime);
     }
 
 
 }
+
+
+
+
+
+
+
+
+
 
 class TaskManager {
     private Map<Integer, Task> tasks = new HashMap<>();
@@ -146,5 +173,10 @@ class TaskManager {
         } else {
             System.out.println("Task with ID " + id + " not found.");
         }
+    }
+
+
+    public void sortTasksbyID() {
+        
     }
 }
