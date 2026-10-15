@@ -1,47 +1,60 @@
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class Main {
 
     public static void main(String[] args) {
 
         TaskManager manager = new TaskManager();
-        Task task1 = new Task("Buy groceries", Set.of("shopping", "errands"), 1);
-        Task task2 = new Task("Finish project", Set.of("work", "urgent"), 2);
-        Task task3 = new Task("Call mom", Set.of("family"), 3);
+        manager.addTask(new Task("Buy groceries", Set.of("shopping", "errands"), 1));
+        manager.addTask(new Task("Finish project", Set.of("work", "urgent"), 2));
+        manager.addTask(new Task("Call mom", Set.of("family"), 3));
 
-        manager.addTask(task1);
-        manager.addTask(task2);
-        manager.addTask(task3);
-
+        Task task1 = manager.findTaskById(1);
         System.out.println("Add new tag 'today': " + task1.addTag("today"));
         System.out.println("Add duplicate tag 'shopping': " + task1.addTag("shopping"));
 
-        manager.listTasks();
-        manager.markTaskAsDone(2);
-        manager.listTasks();
+        // Factory tasks must be added to the manager too
+        TaskFactory factory = new TaskFactory();
+        manager.addTask(factory.createBugTask("Fix login bug", Set.of("bug", "urgent"), 4, Severity.HIGH));
+        manager.addTask(factory.createFeatureTask("Add dark mode", Set.of("feature"), 5, 3.5f));
 
-        Taskfactory taskfactory = new Taskfactory();
-       taskfactory.createBugTask("Fix login bug", Set.of("bug", "urgent"), 4, severity.HIGH);
-       taskfactory.createFeatureTask("Add dark mode", Set.of("feature"), 5, 3.5f);
+        manager.markTaskAsDone(2);
+
+        System.out.println("\n--- Sorted by ID ---");
+        manager.listTasks(new SortById());
+
+        System.out.println("\n--- Sorted by title ---");
+        manager.listTasks(new SortByTitle());
+
+        System.out.println("\n--- Sorted by status (pending first) ---");
+        manager.listTasks(new SortByStatus());
     }
 }
 
 
+enum Status {
+    PENDING, DONE        // declaration order = sort order
+}
+
+enum Severity {
+    LOW, MEDIUM, HIGH
+}
 
 
 class Task {
-
     private String title;
-    private String status;
+    private Status status = Status.PENDING;   // every new task starts as PENDING
     private int id;
     private Set<String> tags = new HashSet<>();
 
     Task(String title, Set<String> tags, int id) {
         this.title = title;
-        this.status = "pending";
         this.tags.addAll(tags);
         this.id = id;
     }
@@ -62,7 +75,7 @@ class Task {
         this.title = title;
     }
 
-    public String getStatus() {
+    public Status getStatus() {
         return status;
     }
 
@@ -71,47 +84,27 @@ class Task {
     }
 
     public void complete() {
-        status = "done";
+        status = Status.DONE;
     }
 }
 
 
-
-
-
-interface task {
-    void createtask();
-
-}
-
-
-enum severity {
-    LOW, MEDIUM, HIGH
-}
-
 class BugTask extends Task {
-    private severity severity;
+    private Severity severity;
 
-    
-
-    public BugTask(String title, Set<String> tags, int id, severity severity) {
+    public BugTask(String title, Set<String> tags, int id, Severity severity) {
         super(title, tags, id);
         this.severity = severity;
     }
 
-
-
-    public severity getSeverity() {
+    public Severity getSeverity() {
         return severity;
     }
-
-    
-
 }
 
 
 class FeatureTask extends Task {
-    float estimatedTime = 0.0f;
+    private float estimatedTime;
 
     public FeatureTask(String title, Set<String> tags, int id, float estimatedTime) {
         super(title, tags, id);
@@ -121,31 +114,19 @@ class FeatureTask extends Task {
     public float getEstimatedTime() {
         return estimatedTime;
     }
-    
-    
-
 }
 
- class Taskfactory  {
-    
-    public Task createBugTask(String title, Set<String> tags, int id, severity severity) {
+
+class TaskFactory {
+
+    public Task createBugTask(String title, Set<String> tags, int id, Severity severity) {
         return new BugTask(title, tags, id, severity);
     }
 
     public Task createFeatureTask(String title, Set<String> tags, int id, float estimatedTime) {
         return new FeatureTask(title, tags, id, estimatedTime);
     }
-
-
 }
-
-
-
-
-
-
-
-
 
 
 class TaskManager {
@@ -160,8 +141,16 @@ class TaskManager {
     }
 
     public void listTasks() {
-        for (Task task : tasks.values()) {
-            System.out.println("ID: " + task.getId() + ", Title: " + task.getTitle() + ", Status: " + task.getStatus() + ", Tags: " + task.getTags());
+        listTasks(new SortById());
+    }
+
+    // Sort a copy of the tasks with the given strategy, then print that sorted list
+    public void listTasks(SortStrategy strategy) {
+        List<Task> list = new ArrayList<>(tasks.values());
+        strategy.sort(list);
+        for (Task task : list) {
+            System.out.println("ID: " + task.getId() + ", Title: " + task.getTitle()
+                    + ", Status: " + task.getStatus() + ", Tags: " + task.getTags());
         }
     }
 
@@ -174,9 +163,27 @@ class TaskManager {
             System.out.println("Task with ID " + id + " not found.");
         }
     }
+}
 
 
-    public void sortTasksbyID() {
-        
+interface SortStrategy {
+    void sort(List<Task> tasks);
+}
+
+class SortById implements SortStrategy {
+    public void sort(List<Task> tasks) {
+        tasks.sort(Comparator.comparingInt(Task::getId));
+    }
+}
+
+class SortByTitle implements SortStrategy {
+    public void sort(List<Task> tasks) {
+        tasks.sort(Comparator.comparing(Task::getTitle));
+    }
+}
+
+class SortByStatus implements SortStrategy {
+    public void sort(List<Task> tasks) {
+        tasks.sort(Comparator.comparing(Task::getStatus));   // PENDING before DONE
     }
 }
