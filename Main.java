@@ -25,6 +25,9 @@ public class Main {
     }
 }
 
+
+
+
 class Task {
 
     private String title;
@@ -66,6 +69,56 @@ class Task {
     public void complete() {
         status = "done";
     }
+}
+
+
+interface task {
+    void createtask();
+
+}
+
+
+enum severity {
+    LOW, MEDIUM, HIGH
+}
+
+class BugTask implements task {
+    private severity severity;
+
+    public BugTask(severity severity) {
+        this.severity = severity;
+    }
+
+    @Override
+    public void createtask() {
+        System.out.println("Bug task created with severity: " + severity);
+        
+    }
+}
+
+
+class FeatureTask implements task {
+    float estimatedTime = 0.0f;
+    @Override
+    public void createtask() {
+        System.out.println("Feature task created");
+        System.out.println("Estimated time: " + estimatedTime + " hours");
+    }
+}
+
+ class Taskfactory  {
+    
+    public task createTask(String type, severity severity) {
+        if (type.equalsIgnoreCase("bug")) {
+            return new BugTask(severity);
+        } else if (type.equalsIgnoreCase("feature")) {
+            return new FeatureTask();
+        } else {
+            throw new IllegalArgumentException("Invalid task type: " + type);
+        }
+    }
+
+
 }
 
 class TaskManager {
