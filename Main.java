@@ -19,7 +19,6 @@ public class Main {
         System.out.println("Add new tag 'today': " + task1.addTag("today"));
         System.out.println("Add duplicate tag 'shopping': " + task1.addTag("shopping"));
 
-        // Factory tasks must be added to the manager too
         TaskFactory factory = new TaskFactory();
         manager.addTask(factory.createBugTask("Fix login bug", Set.of("bug", "urgent"), 4, Severity.HIGH));
         manager.addTask(factory.createFeatureTask("Add dark mode", Set.of("feature"), 5, 3.5f));
@@ -34,12 +33,13 @@ public class Main {
 
         System.out.println("\n--- Sorted by status (pending first) ---");
         manager.listTasks(new SortByStatus());
+    
     }
 }
 
 
 enum Status {
-    PENDING, DONE        // declaration order = sort order
+    PENDING, DONE       
 }
 
 enum Severity {
@@ -49,7 +49,7 @@ enum Severity {
 
 class Task {
     private String title;
-    private Status status = Status.PENDING;   // every new task starts as PENDING
+    private Status status = Status.PENDING;   
     private int id;
     private Set<String> tags = new HashSet<>();
 
@@ -144,7 +144,6 @@ class TaskManager {
         listTasks(new SortById());
     }
 
-    // Sort a copy of the tasks with the given strategy, then print that sorted list
     public void listTasks(SortStrategy strategy) {
         List<Task> list = new ArrayList<>(tasks.values());
         strategy.sort(list);
@@ -184,6 +183,6 @@ class SortByTitle implements SortStrategy {
 
 class SortByStatus implements SortStrategy {
     public void sort(List<Task> tasks) {
-        tasks.sort(Comparator.comparing(Task::getStatus));   // PENDING before DONE
+        tasks.sort(Comparator.comparing(Task::getStatus));   
     }
 }
