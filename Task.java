@@ -1,13 +1,19 @@
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+
+
+enum Status {
+    PENDING,
+    DONE
+}
+
 class Task {
     private String title;
-    private Status status = Status.PENDING;
+    private Status status = Status.PENDING;   
     private int id;
-    private final Set<String> tags = new HashSet<>();
+    private Set<String> tags = new HashSet<>();
 
     Task(String title, Set<String> tags, int id) {
         this.title = title;
@@ -15,8 +21,12 @@ class Task {
         this.id = id;
     }
 
-    public Set<String> getTags() {
-        return Collections.unmodifiableSet(tags);
+
+
+   
+
+    protected Set<String> getTags() {
+        return tags;
     }
 
     public boolean addTag(String tag) {
