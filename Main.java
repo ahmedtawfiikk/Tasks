@@ -28,7 +28,22 @@ public class Main {
 
         System.out.println("\n--- Sorted by status (pending first) ---");
         manager.listTasks(new SortByStatus());
-    
+
+        System.out.println("\n--- Filter: pending tasks, sorted by title ---");
+        manager.listTasks(new FilterByStatus(Status.PENDING), new SortByTitle());
+
+        System.out.println("\n--- Filter: tagged 'urgent' ---");
+        manager.listTasks(new FilterByTag("urgent"), new SortById());
+
+        System.out.println("\n--- Filter: high severity bugs ---");
+        manager.listTasks(new FilterBySeverity(Severity.HIGH), new SortById());
+
+        System.out.println("\n--- Filter: urgent AND pending ---");
+        manager.listTasks(new AndFilter(new FilterByTag("urgent"), new FilterByStatus(Status.PENDING)), new SortById());
+
+        System.out.println("\n--- Filter: tagged 'school' ---");
+        manager.listTasks(new FilterByTag("school"), new SortById());
+
     }
 }
 
