@@ -23,7 +23,20 @@ class TaskManager {
     }
 
     public void listTasks(SortStrategy strategy) {
-        List<Task> list = new ArrayList<>(tasks.values());
+        listTasks(task -> true, strategy);
+    }
+
+    public void listTasks(TaskFilter filter, SortStrategy strategy) {
+        List<Task> list = new ArrayList<>();
+        for (Task task : tasks.values()) {
+            if (filter.matches(task)) {
+                list.add(task);
+            }
+        }
+        if (list.isEmpty()) {
+            System.out.println("No tasks match this filter.");
+            return;
+        }
         strategy.sort(list);
         for (Task task : list) {
             System.out.println("ID: " + task.getId() + ", Title: " + task.getTitle()

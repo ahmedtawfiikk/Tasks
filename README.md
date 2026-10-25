@@ -23,6 +23,13 @@ Tasks:
 3. Design patterns:
 - we use (factory method) in Task diffrent types creation
 - we use (Strategy pattern) in sorting with diffrent ways 
+- we use (Strategy pattern) again in filtering with diffrent rules
+
+4. Filtering
+- TaskManager can list only the tasks that match a filter: by status, by tag, or by bug severity.
+- Filters can be combined with AndFilter (for example: tagged "urgent" AND still pending).
+- A filter and a sort can be used together: listTasks(filter, sortStrategy).
+- Each filter is its own class sharing the TaskFilter interface, so adding a new filter later only means adding one new class, with no changes to TaskManager.
 
 and aslo we save changes by github and git version control
 
