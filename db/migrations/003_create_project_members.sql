@@ -11,3 +11,8 @@ CREATE TABLE project_members (
 );
 
 CREATE UNIQUE INDEX project_members_one_owner ON project_members (project_id) WHERE role = 'owner';
+
+ALTER TABLE projects ADD CONSTRAINT projects_owner_is_member
+  FOREIGN KEY (id, owner_id, owner_role)
+  REFERENCES project_members (project_id, user_id, role)
+  DEFERRABLE INITIALLY DEFERRED;
