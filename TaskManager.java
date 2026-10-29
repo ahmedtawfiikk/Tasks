@@ -8,13 +8,13 @@ import java.util.Map;
 
 
 class TaskManager {
-    private Map<Integer, Task> tasks = new HashMap<>();
+    private Map<Long, Task> tasks = new HashMap<>();
 
     public void addTask(Task task) {
         tasks.put(task.getId(), task);
     }
 
-    public Task findTaskById(int id) {
+    public Task findTaskById(long id) {
         return tasks.get(id);
     }
 
@@ -44,7 +44,7 @@ class TaskManager {
         }
     }
 
-    public void markTaskAsDone(int id) {
+    public void markTaskAsDone(long id) {
         Task task = findTaskById(id);
         if (task != null) {
             task.complete();

@@ -10,7 +10,7 @@ import java.util.List;
 
 class SortById implements SortStrategy {
     public void sort(List<Task> tasks) {
-        tasks.sort(Comparator.comparingInt(Task::getId));
+        tasks.sort(Comparator.comparingLong(Task::getId));
     }
 }
 
