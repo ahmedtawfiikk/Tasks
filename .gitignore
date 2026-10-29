@@ -1,0 +1,9 @@
+# Maven build output
+target/
+
+# Compiled classes
+*.class
+
+# Local environment files (may contain passwords)
+.env
+*.env

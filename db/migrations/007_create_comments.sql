@@ -1,0 +1,8 @@
+CREATE TABLE comments (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  task_id BIGINT NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+  author_id	BIGINT NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  body	TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT comments_body_not_blank CHECK (btrim(body) <> '')
+);
