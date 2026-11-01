@@ -1,0 +1,5 @@
+{
+    "java.project.sourcePaths": [".", "Model", "Repository", "Service", "Sort", "Filter"],
+    "java.project.referencedLibraries": ["lib/**/*.jar"],
+    "java.project.outputPath": "out"
+}
