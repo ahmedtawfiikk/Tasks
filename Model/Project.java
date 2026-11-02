@@ -4,6 +4,7 @@ class Project {
     private long id;
     private String name;
     private String key;
+    // not a column on projects: it comes from the project_members row with role 'owner'
     private long ownerId;
     private OffsetDateTime createdAt;
 
