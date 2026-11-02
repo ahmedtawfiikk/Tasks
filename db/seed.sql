@@ -9,11 +9,11 @@ INSERT INTO users (full_name, email) VALUES
   ('Mohamed Tawfik', 'mohamed@example.com'),
   ('Ziad Mohamed', 'ziad@example.com');
 
-INSERT INTO projects (name, key, owner_id) VALUES
-  ('Payments', 'PAY', 1),
-  ('Inventory', 'INV', 2),
-  ('Sales', 'SAL', 4),
-  ('Website', 'WEB', 5);
+INSERT INTO projects (name, key) VALUES
+  ('Payments', 'PAY'),
+  ('Inventory', 'INV'),
+  ('Sales', 'SAL'),
+  ('Website', 'WEB');
 
 INSERT INTO project_members (project_id, user_id, role) VALUES
   (1, 1, 'owner'),
