@@ -43,6 +43,11 @@ class Task {
         return id;
     }
 
+    // the repository gives the task its id when it is saved
+    public void setId(long id) {
+        this.id = id;
+    }
+
     public long getProjectId() {
         return projectId;
     }
