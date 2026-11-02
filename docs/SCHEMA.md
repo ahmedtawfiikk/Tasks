@@ -15,7 +15,83 @@ The task manager stores its data in PostgreSQL. There are 8 tables, one migratio
 
 ## ER diagram
 
-![ER diagram of the 8 tables](image.png)
+```mermaid
+erDiagram
+    users ||--o{ project_members : "belongs to"
+    projects ||--|{ project_members : "has members, one is the owner"
+    projects ||--o{ tags : defines
+    projects ||--o{ tasks : contains
+    users ||--o{ tasks : reports
+    project_members |o--o{ tasks : "is assigned"
+    tasks ||--o{ task_tags : has
+    tags ||--o{ task_tags : "used in"
+    tasks ||--o{ comments : has
+    users ||--o{ comments : writes
+    tasks ||--o{ task_status_history : records
+    users ||--o{ task_status_history : "changed by"
+
+    users {
+        bigint id PK
+        varchar full_name "NOT NULL, not blank"
+        varchar email UK "NOT NULL, unique on lower(email)"
+        timestamptz created_at "NOT NULL, default now()"
+    }
+    projects {
+        bigint id PK
+        varchar name UK "NOT NULL, not blank"
+        text key UK "2 to 5 uppercase letters"
+        timestamptz created_at "NOT NULL, default now()"
+    }
+    project_members {
+        bigint project_id PK, FK "projects.id, CASCADE"
+        bigint user_id PK, FK "users.id, RESTRICT"
+        member_role role "owner / maintainer / member, at most one owner per project"
+        timestamptz joined_at "NOT NULL, default now()"
+    }
+    tasks {
+        bigint id PK
+        bigint project_id FK "projects.id, CASCADE"
+        task_type type "bug / feature"
+        varchar title "NOT NULL, not blank"
+        text description "NOT NULL, default empty"
+        task_status status "pending / in_progress / done"
+        bigint reporter_id FK "users.id, RESTRICT"
+        bigint assignee_id FK "(project_id, assignee_id) to project_members, SET NULL"
+        date due_date "optional"
+        timestamptz created_at "NOT NULL, default now()"
+        timestamptz completed_at "set only when status = done, >= created_at"
+        bug_severity severity "bugs only: low / medium / high / critical"
+        numeric estimate_hours "features only: > 0 and <= 200"
+    }
+    tags {
+        bigint id PK
+        bigint project_id FK "projects.id, CASCADE"
+        varchar name "unique per project on lower(name)"
+        timestamptz created_at "NOT NULL, default now()"
+    }
+    task_tags {
+        bigint task_id PK, FK "(task_id, project_id) to tasks, CASCADE"
+        bigint tag_id PK, FK "(tag_id, project_id) to tags, CASCADE"
+        bigint project_id FK "must match both task and tag"
+    }
+    comments {
+        bigint id PK
+        bigint task_id FK "tasks.id, CASCADE"
+        bigint author_id FK "users.id, RESTRICT"
+        text body "not empty, not just spaces"
+        timestamptz created_at "NOT NULL, default now()"
+    }
+    task_status_history {
+        bigint id PK
+        bigint task_id FK "tasks.id, CASCADE"
+        task_status old_status
+        task_status new_status "different from old_status"
+        bigint changed_by FK "users.id, RESTRICT"
+        timestamptz changed_at "NOT NULL, default now()"
+    }
+```
+
+`projects ||--|{ project_members` means a project has one or more members. The database checks "at most one owner"; "at least one owner" is kept by Java (hard rule 3).
 
 Crow's-foot notation: `||` means exactly one, `o<` means zero or many.
 
