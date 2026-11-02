@@ -30,7 +30,7 @@ Every rule below is checked by PostgreSQL itself. A bad `INSERT` typed in psql f
 | Email is unique, ignoring case | Unique index on `lower(email)`. `Ali@x.com` and `ali@x.com` both become `ali@x.com`, so the second one is rejected. |
 | Project name and key are unique | `UNIQUE` on each column |
 | Key is 2 to 5 uppercase letters | `CHECK (key ~ '^[A-Z]{2,5}$')` |
-| Role, status and severity only allow listed values | `CHECK (column IN (...))` |
+| Role, status, type and severity only allow listed values | `ENUM` types (`member_role`, `task_status`, `task_type`, `bug_severity`) |
 | Bug has a severity and no estimate; feature has an estimate and no severity | One `CHECK` on `type`, `severity` and `estimate_hours` together |
 | Estimate is above 0 and at most 200 | `CHECK (estimate_hours > 0 AND estimate_hours <= 200)` |
 | `completed_at` is set only when status is `done` | `CHECK ((completed_at IS NOT NULL) = (status = 'done'))`. Both sides must be true or both false. |
@@ -74,7 +74,7 @@ Every rule below is checked by PostgreSQL itself. A bad `INSERT` typed in psql f
 |---|---|---|
 | **Constraints** | Every rule is a plain `CHECK` on one row. "Bug has severity and no estimate" is easy. | The database can't make sure every task has **exactly one** child row. A task could have no child row, or both. Fixing that needs triggers, which are not allowed. |
 | **Queries** | List all tasks with one `SELECT`, no joins | Every list needs `LEFT JOIN bug_tasks` and `LEFT JOIN feature_tasks` |
-| **Adding a third type** (for example `ChoreTask`, no extra field) | New migration: allow `'chore'` in the type `CHECK`, and add "chore has neither severity nor estimate" to the type rule | New table `chore_tasks`, plus all the joins and the same "exactly one child" problem |
+| **Adding a third type** (for example `ChoreTask`, no extra field) | New migration: `ALTER TYPE task_type ADD VALUE 'chore'`, and add "chore has neither severity nor estimate" to the type rule | New table `chore_tasks`, plus all the joins and the same "exactly one child" problem |
 | **Downside** | Columns that are NULL for the other type | More tables and joins |
 
 **Inheritance vs composition.** In Java, `BugTask extends Task`: that's inheritance, "a bug **is a** task". The one-table design keeps that idea: a bug row **is** a task row, with a type label. This is called single-table inheritance. The table-per-type design is closer to composition: a `bug_tasks` row **has a** `tasks` row it points to. Java stays with inheritance either way. `TaskFactory` turns a row into a `BugTask` or a `FeatureTask` by reading the `type` column.
@@ -139,12 +139,21 @@ Simple test for each table: **every column depends on the key, the whole key, an
 | **`NUMERIC(5,2)`** for `estimate_hours` | Exact decimals (`2.5` stays `2.5`). `REAL` or `DOUBLE` can store `2.5` as `2.4999…`. |
 | **`BIGINT GENERATED ALWAYS AS IDENTITY`** for ids | The database creates the ids. `ALWAYS` stops anyone from typing their own id by mistake. `BIGINT` won't run out. |
 
-**How enums are stored:** status, role, type and severity are text columns with a `CHECK (x IN (...))` list, not PostgreSQL `ENUM` types.
-- Changing the list is one migration that drops and re-adds the `CHECK`.
-- With an `ENUM` type, you can add a value but you can't remove one.
-- Values are readable (`'in_progress'`), and they map directly to the Java enums.
+**How enums are stored:** status, role, type and severity use PostgreSQL `ENUM` types.
 
-`task_status_history` uses `VARCHAR(50)` for `old_status` and `new_status`. The `CHECK` list does the real limiting; the 50 is only a safety cap.
+| Type | Values | Used by |
+|---|---|---|
+| `member_role` | `owner`, `maintainer`, `member` | `project_members.role`, `projects.owner_role` |
+| `task_status` | `pending`, `in_progress`, `done` | `tasks.status`, `task_status_history.old_status` and `new_status` |
+| `task_type` | `bug`, `feature` | `tasks.type` |
+| `bug_severity` | `low`, `medium`, `high`, `critical` | `tasks.severity` |
+
+- The type itself rejects any other value, so no `CHECK (x IN (...))` list is needed.
+- The list is written once and shared. `tasks.status` and the two history columns can't drift apart.
+- Each value takes 4 bytes on disk instead of the full text.
+- Values are readable (`'in_progress'`), and they map directly to the Java enums.
+- Trade-off: a new value can be added later with `ALTER TYPE ... ADD VALUE`, but a value can't be removed.
+- From Java, a `PreparedStatement` must cast the parameter, for example `?::task_status`. Otherwise PostgreSQL refuses to compare the enum with a text value.
 
 ## Seed data
 
