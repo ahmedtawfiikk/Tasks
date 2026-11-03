@@ -1,68 +1,94 @@
 
+import java.util.List;
 import java.util.Set;
 
 public class Main {
 
     public static void main(String[] args) {
 
-        TaskManager manager = new TaskManager();
-        manager.addTask(new Task("Buy groceries", Set.of("shopping", "errands"), 1));
-        manager.addTask(new Task("Finish project", Set.of("work", "urgent"), 2));
-        manager.addTask(new Task("Call mom", Set.of("family"), 3));
+        // the storage is chosen here; TaskManager only sees the interfaces
+        UserRepository userRepo = new InMemoryUserRepository();
+        ProjectRepository projectRepo = new InMemoryProjectRepository();
+        TaskRepository taskRepo = new InMemoryTaskRepository(userRepo);
+        TaskManager manager = new TaskManager(userRepo, projectRepo, taskRepo);
 
-        Task task1 = manager.findTaskById(1);
-        System.out.println("Add new tag 'today': " + task1.addTag("today"));
-        System.out.println("Add duplicate tag 'shopping': " + task1.addTag("shopping"));
+        // every task needs a project and a reporter
+        User john = manager.createUser("John Doe", "john@example.com");
+        User jane = manager.createUser("Jane Smith", "jane@example.com");
+        Project project = manager.createProject("Personal", "PER", john.getId());
+        manager.addMember(project.getId(), jane.getId(), Role.MEMBER);
 
+        // the id passed to the constructor is ignored: the repository gives the real one
         TaskFactory factory = new TaskFactory();
-        manager.addTask(factory.createTask("bug", "Fix login bug", Set.of("bug", "urgent"), 4, Severity.HIGH));
-        manager.addTask(factory.createTask("feature", "Add dark mode", Set.of("feature"), 5, 3.5f));
+        Task groceries = save(manager, new Task("Buy groceries", Set.of("shopping", "errands"), 0), project, john);
+        Task finish = save(manager, new Task("Finish project", Set.of("work", "urgent"), 0), project, john);
+        save(manager, new Task("Call mom", Set.of("family"), 0), project, john);
+        Task bug = save(manager, factory.createTask("bug", "Fix login bug", Set.of("bug", "urgent"), 0, Severity.HIGH), project, john);
+        save(manager, factory.createTask("feature", "Add dark mode", Set.of("feature"), 0, 3.5f), project, john);
 
-        manager.markTaskAsDone(2);
+        manager.addTag(groceries.getId(), "today");
+        manager.assign(bug.getId(), jane.getId());
+
+        manager.changeStatus(finish.getId(), Status.DONE, john.getId());
+        System.out.println("Task with ID " + finish.getId() + " marked as done.");
+
+        manager.addComment(bug.getId(), jane.getId(), "I can reproduce it on Safari");
 
         System.out.println("\n--- Sorted by ID ---");
-        manager.listTasks(new SortById());
+        print(manager.listTasks(project.getId(), null, null, null, new SortById(), 1, 20));
 
         System.out.println("\n--- Sorted by title ---");
-        manager.listTasks(new SortByTitle());
+        print(manager.listTasks(project.getId(), null, null, null, new SortByTitle(), 1, 20));
 
         System.out.println("\n--- Sorted by status (pending first) ---");
-        manager.listTasks(new SortByStatus());
+        print(manager.listTasks(project.getId(), null, null, null, new SortByStatus(), 1, 20));
 
         System.out.println("\n--- Filter: pending tasks, sorted by title ---");
-        manager.listTasks(new FilterByStatus(Status.PENDING), new SortByTitle());
+        print(manager.listTasks(project.getId(), Status.PENDING, null, null, new SortByTitle(), 1, 20));
 
         System.out.println("\n--- Filter: tagged 'urgent' ---");
-        manager.listTasks(new FilterByTag("urgent"), new SortById());
-
-        System.out.println("\n--- Filter: high severity bugs ---");
-        manager.listTasks(new FilterBySeverity(Severity.HIGH), new SortById());
+        print(manager.listTasks(project.getId(), null, null, "urgent", new SortById(), 1, 20));
 
         System.out.println("\n--- Filter: urgent AND pending ---");
-        manager.listTasks(new AndFilter(new FilterByTag("urgent"), new FilterByStatus(Status.PENDING)), new SortById());
+        print(manager.listTasks(project.getId(), Status.PENDING, null, "urgent", new SortById(), 1, 20));
+
+        System.out.println("\n--- Filter: assigned to Jane ---");
+        print(manager.listTasks(project.getId(), null, jane.getId(), null, new SortById(), 1, 20));
 
         System.out.println("\n--- Filter: tagged 'school' ---");
-        manager.listTasks(new FilterByTag("school"), new SortById());
+        print(manager.listTasks(project.getId(), null, null, "school", new SortById(), 1, 20));
 
+        System.out.println("\n--- Page 2, 2 per page, sorted by ID ---");
+        print(manager.listTasks(project.getId(), null, null, null, new SortById(), 2, 2));
+
+        System.out.println("\n--- Task " + finish.getId() + " status history ---");
+        for (StatusChange change : manager.findStatusHistory(finish.getId())) {
+            System.out.println(change.getOldStatus() + " -> " + change.getNewStatus() + " by user " + change.getChangedBy());
+        }
+
+        System.out.println("\n--- Task " + bug.getId() + " comments ---");
+        for (Comment comment : manager.findComments(bug.getId())) {
+            System.out.println("User " + comment.getAuthorId() + ": " + comment.getBody());
+        }
+    }
+
+    // fills in the project and reporter, then saves the task
+    private static Task save(TaskManager manager, Task task, Project project, User reporter) {
+        task.setProjectId(project.getId());
+        task.setReporterId(reporter.getId());
+        return manager.createTask(task);
+    }
+
+    private static void print(List<TaskListItem> items) {
+        if (items.isEmpty()) {
+            System.out.println("No tasks match this filter.");
+            return;
+        }
+        for (TaskListItem item : items) {
+            Task task = item.getTask();
+            String assignee = item.getAssigneeName() == null ? "unassigned" : item.getAssigneeName();
+            System.out.println("ID: " + task.getId() + ", Title: " + task.getTitle()
+                    + ", Status: " + task.getStatus() + ", Assignee: " + assignee + ", Tags: " + task.getTags());
+        }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
