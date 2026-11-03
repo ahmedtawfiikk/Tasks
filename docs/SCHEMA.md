@@ -5,7 +5,7 @@ The task manager stores its data in PostgreSQL. There are 8 tables, one migratio
 | Table | What one row means |
 |---|---|
 | `users` | A person who can use the app |
-| `projects` | A project such as `PAY`, with one owner |
+| `projects` | A project such as `PAY`. Its owner is the member with the role `owner`. |
 | `project_members` | "This user is in this project, with this role" |
 | `tasks` | A bug or a feature inside one project |
 | `tags` | A label such as `backend`, which belongs to one project |
@@ -15,7 +15,83 @@ The task manager stores its data in PostgreSQL. There are 8 tables, one migratio
 
 ## ER diagram
 
-![ER diagram of the 8 tables](image.png)
+```mermaid
+erDiagram
+    users ||--o{ project_members : "belongs to"
+    projects ||--|{ project_members : "has members, one is the owner"
+    projects ||--o{ tags : defines
+    projects ||--o{ tasks : contains
+    users ||--o{ tasks : reports
+    project_members |o--o{ tasks : "is assigned"
+    tasks ||--o{ task_tags : has
+    tags ||--o{ task_tags : "used in"
+    tasks ||--o{ comments : has
+    users ||--o{ comments : writes
+    tasks ||--o{ task_status_history : records
+    users ||--o{ task_status_history : "changed by"
+
+    users {
+        bigint id PK
+        varchar full_name "NOT NULL, not blank"
+        varchar email UK "NOT NULL, unique on lower(email)"
+        timestamptz created_at "NOT NULL, default now()"
+    }
+    projects {
+        bigint id PK
+        varchar name UK "NOT NULL, not blank"
+        text key UK "2 to 5 uppercase letters"
+        timestamptz created_at "NOT NULL, default now()"
+    }
+    project_members {
+        bigint project_id PK, FK "projects.id, CASCADE"
+        bigint user_id PK, FK "users.id, RESTRICT"
+        member_role role "owner / maintainer / member, at most one owner per project"
+        timestamptz joined_at "NOT NULL, default now()"
+    }
+    tasks {
+        bigint id PK
+        bigint project_id FK "projects.id, CASCADE"
+        task_type type "bug / feature"
+        varchar title "NOT NULL, not blank"
+        text description "NOT NULL, default empty"
+        task_status status "pending / in_progress / done"
+        bigint reporter_id FK "users.id, RESTRICT"
+        bigint assignee_id FK "(project_id, assignee_id) to project_members, SET NULL"
+        date due_date "optional"
+        timestamptz created_at "NOT NULL, default now()"
+        timestamptz completed_at "set only when status = done, >= created_at"
+        bug_severity severity "bugs only: low / medium / high / critical"
+        numeric estimate_hours "features only: > 0 and <= 200"
+    }
+    tags {
+        bigint id PK
+        bigint project_id FK "projects.id, CASCADE"
+        varchar name "unique per project on lower(name)"
+        timestamptz created_at "NOT NULL, default now()"
+    }
+    task_tags {
+        bigint task_id PK, FK "(task_id, project_id) to tasks, CASCADE"
+        bigint tag_id PK, FK "(tag_id, project_id) to tags, CASCADE"
+        bigint project_id FK "must match both task and tag"
+    }
+    comments {
+        bigint id PK
+        bigint task_id FK "tasks.id, CASCADE"
+        bigint author_id FK "users.id, RESTRICT"
+        text body "not empty, not just spaces"
+        timestamptz created_at "NOT NULL, default now()"
+    }
+    task_status_history {
+        bigint id PK
+        bigint task_id FK "tasks.id, CASCADE"
+        task_status old_status
+        task_status new_status "different from old_status"
+        bigint changed_by FK "users.id, RESTRICT"
+        timestamptz changed_at "NOT NULL, default now()"
+    }
+```
+
+`projects ||--|{ project_members` means a project has one or more members. The database checks "at most one owner"; "at least one owner" is kept by Java (hard rule 3).
 
 Crow's-foot notation: `||` means exactly one, `o<` means zero or many.
 
@@ -30,7 +106,7 @@ Every rule below is checked by PostgreSQL itself. A bad `INSERT` typed in psql f
 | Email is unique, ignoring case | Unique index on `lower(email)`. `Ali@x.com` and `ali@x.com` both become `ali@x.com`, so the second one is rejected. |
 | Project name and key are unique | `UNIQUE` on each column |
 | Key is 2 to 5 uppercase letters | `CHECK (key ~ '^[A-Z]{2,5}$')` |
-| Role, status and severity only allow listed values | `CHECK (column IN (...))` |
+| Role, status, type and severity only allow listed values | `ENUM` types (`member_role`, `task_status`, `task_type`, `bug_severity`) |
 | Bug has a severity and no estimate; feature has an estimate and no severity | One `CHECK` on `type`, `severity` and `estimate_hours` together |
 | Estimate is above 0 and at most 200 | `CHECK (estimate_hours > 0 AND estimate_hours <= 200)` |
 | `completed_at` is set only when status is `done` | `CHECK ((completed_at IS NOT NULL) = (status = 'done'))`. Both sides must be true or both false. |
@@ -39,7 +115,7 @@ Every rule below is checked by PostgreSQL itself. A bad `INSERT` typed in psql f
 | Names, titles and comment bodies are not empty or just spaces | `CHECK (btrim(column) <> '')` |
 | A status change really changes something | `CHECK (old_status <> new_status)` |
 
-**The three hard rules.** A `CHECK` can only look at its own row, and these rules compare two tables. They are solved with **composite foreign keys**, meaning foreign keys on two or three columns at once.
+**The three hard rules.** A `CHECK` can only look at its own row, and these rules compare two tables. Rules 1 and 2 are solved with **composite foreign keys**, meaning foreign keys on two columns at once. Rule 3 is split between the database and Java.
 
 1. **An assignee must be a member of the task's project.**
    `tasks (project_id, assignee_id)` references `project_members (project_id, user_id)`.
@@ -54,15 +130,30 @@ Every rule below is checked by PostgreSQL itself. A bad `INSERT` typed in psql f
    This is why `tasks` and `tags` each have `UNIQUE (id, project_id)`: a foreign key can only point at columns that are unique together.
 
 3. **A project's owner is always one of its members, with the role `owner`.**
-   `projects` has an extra column `owner_role`, which is always `'owner'` (a `CHECK` makes sure). Then
-   `projects (id, owner_id, owner_role)` references `project_members (project_id, user_id, role)`.
-   So the owner must have a membership row with the role `owner`.
+   `projects` has no owner column. The owner **is** the `project_members` row with the role `owner`. So "the owner is a member with the owner role" is true by definition, and the owner is stored only once.
 
-   This creates a chicken-and-egg problem: the project needs the membership, and the membership needs the project. So the key is `DEFERRABLE INITIALLY DEFERRED`, which means it is checked at `COMMIT` instead of after each statement. Insert the project and its owner membership in **one transaction**, and the check passes at the end.
+   | Part of the rule | Enforced by |
+   |---|---|
+   | At most one owner per project | Database: partial unique index `project_members_one_owner` on `(project_id) WHERE role = 'owner'` |
+   | An owner can't disappear with their user | Database: `project_members.user_id` is `ON DELETE RESTRICT` |
+   | At least one owner per project | Java (the gap below) |
 
-   After that, the key also protects the owner. You can't delete the owner's membership or change its role while they are the owner.
+   **The gap.** "Every project has an owner" means a `projects` row needs a matching `project_members` row to exist. A foreign key can't say that without an extra column on `projects`, and a trigger is not allowed. So Java enforces it:
+   - `ProjectRepository.create` inserts the project and its owner membership in **one transaction**. If either insert fails, both are rolled back, so a project is never saved without its owner.
+   - The repository has no method that deletes or demotes the owner, and `addMember` refuses the role `owner`.
 
-   A partial unique index on `project_members (project_id) WHERE role = 'owner'` also makes sure a project has **at most one** owner row.
+   What is still possible: someone typing a `DELETE` or `UPDATE` on `project_members` in psql can leave a project with no owner. This query finds those projects:
+
+   ```sql
+   SELECT p.id, p.key
+   FROM projects p
+   WHERE NOT EXISTS (
+     SELECT 1 FROM project_members m
+     WHERE m.project_id = p.id AND m.role = 'owner'
+   );
+   ```
+
+   **Why not an `owner_id` column on `projects`?** A foreign key from `projects (id, owner_id)` can check that the owner is a member, but not that their role is `owner`. A foreign key compares columns only, so it would need an extra column on `projects` that always holds `'owner'`. We chose to store the owner once, with no constant column, and accept this gap.
 
 ## Decision 1: one `tasks` table, not one table per type
 
@@ -74,7 +165,7 @@ Every rule below is checked by PostgreSQL itself. A bad `INSERT` typed in psql f
 |---|---|---|
 | **Constraints** | Every rule is a plain `CHECK` on one row. "Bug has severity and no estimate" is easy. | The database can't make sure every task has **exactly one** child row. A task could have no child row, or both. Fixing that needs triggers, which are not allowed. |
 | **Queries** | List all tasks with one `SELECT`, no joins | Every list needs `LEFT JOIN bug_tasks` and `LEFT JOIN feature_tasks` |
-| **Adding a third type** (for example `ChoreTask`, no extra field) | New migration: allow `'chore'` in the type `CHECK`, and add "chore has neither severity nor estimate" to the type rule | New table `chore_tasks`, plus all the joins and the same "exactly one child" problem |
+| **Adding a third type** (for example `ChoreTask`, no extra field) | New migration: `ALTER TYPE task_type ADD VALUE 'chore'`, and add "chore has neither severity nor estimate" to the type rule | New table `chore_tasks`, plus all the joins and the same "exactly one child" problem |
 | **Downside** | Columns that are NULL for the other type | More tables and joins |
 
 **Inheritance vs composition.** In Java, `BugTask extends Task`: that's inheritance, "a bug **is a** task". The one-table design keeps that idea: a bug row **is** a task row, with a type label. This is called single-table inheritance. The table-per-type design is closer to composition: a `bug_tasks` row **has a** `tasks` row it points to. Java stays with inheritance either way. `TaskFactory` turns a row into a `BugTask` or a `FeatureTask` by reading the `type` column.
@@ -85,10 +176,8 @@ Main idea: **nothing a person wrote disappears because a user was deleted.** Row
 
 | Foreign key | On delete | Why |
 |---|---|---|
-| `projects.owner_id` → `users` | `RESTRICT` | You can't delete a user who owns a project. Give the project a new owner first. |
-| `projects (id, owner_id, owner_role)` → `project_members` | blocked (default) | You can't remove the owner's membership. See hard rule 3. |
 | `project_members.project_id` → `projects` | `CASCADE` | A deleted project has no members |
-| `project_members.user_id` → `users` | `CASCADE` | A deleted user is no longer in any project |
+| `project_members.user_id` → `users` | `RESTRICT` | You can't delete a user who is still in a project. Otherwise deleting an owner would leave the project with no owner (hard rule 3). Remove their memberships first. |
 | `tasks.project_id` → `projects` | `CASCADE` | Tasks belong to their project |
 | `tasks.reporter_id` → `users` | `RESTRICT` | **A user who reported 300 tasks can't be deleted**, because that would lose who reported them. Deactivate the user instead of deleting. |
 | `tasks (project_id, assignee_id)` → `project_members` | `SET NULL (assignee_id)` | If someone leaves the project, their tasks become **unassigned**. The tasks stay. Only `assignee_id` is cleared. Plain `SET NULL` would also clear `project_id`, so the column list matters. |
@@ -101,8 +190,8 @@ Main idea: **nothing a person wrote disappears because a user was deleted.** Row
 | `task_status_history.changed_by` → `users` | `RESTRICT` | Don't lose who changed a status |
 
 Tested on the seed data:
-- Deleting John (owns PAY, reported tasks) fails on `projects_owner_id_fkey`.
-- Deleting Ziad (changed task statuses) fails on `task_status_history_changed_by_fkey`.
+- Deleting John (owns PAY) fails on `project_members_user_id_fkey`, because he is still a member. After removing his memberships, it still fails on `tasks_reporter_id_fkey`, because he reported tasks.
+- Deleting Ziad fails on `project_members_user_id_fkey`. After removing his memberships, it still fails on `task_status_history_changed_by_fkey`, because he changed task statuses.
 - Removing Alice from SAL leaves her two SAL tasks in place, now unassigned.
 - Deleting project PAY removes its tasks, tags, members, comments and history.
 
@@ -113,7 +202,7 @@ Simple test for each table: **every column depends on the key, the whole key, an
 | Table | Key | Other columns depend only on the key? |
 |---|---|---|
 | `users` | `id` | Yes: name, email, created time are facts about one user |
-| `projects` | `id` | Yes: name, key, owner, created time. `owner_role` is always `'owner'` (a fixed value, not a fact stored twice). |
+| `projects` | `id` | Yes: name, key, created time. The owner is not stored here, so it can't disagree with `project_members`. |
 | `project_members` | `(project_id, user_id)` | Yes: `role` and `joined_at` describe this person **in this project**, so they need both columns of the key |
 | `tasks` | `id` | Yes. The project, assignee and reporter are stored as ids, never as names. |
 | `tags` | `id` | Yes |
@@ -139,12 +228,21 @@ Simple test for each table: **every column depends on the key, the whole key, an
 | **`NUMERIC(5,2)`** for `estimate_hours` | Exact decimals (`2.5` stays `2.5`). `REAL` or `DOUBLE` can store `2.5` as `2.4999…`. |
 | **`BIGINT GENERATED ALWAYS AS IDENTITY`** for ids | The database creates the ids. `ALWAYS` stops anyone from typing their own id by mistake. `BIGINT` won't run out. |
 
-**How enums are stored:** status, role, type and severity are text columns with a `CHECK (x IN (...))` list, not PostgreSQL `ENUM` types.
-- Changing the list is one migration that drops and re-adds the `CHECK`.
-- With an `ENUM` type, you can add a value but you can't remove one.
-- Values are readable (`'in_progress'`), and they map directly to the Java enums.
+**How enums are stored:** status, role, type and severity use PostgreSQL `ENUM` types.
 
-`task_status_history` uses `VARCHAR(50)` for `old_status` and `new_status`. The `CHECK` list does the real limiting; the 50 is only a safety cap.
+| Type | Values | Used by |
+|---|---|---|
+| `member_role` | `owner`, `maintainer`, `member` | `project_members.role` |
+| `task_status` | `pending`, `in_progress`, `done` | `tasks.status`, `task_status_history.old_status` and `new_status` |
+| `task_type` | `bug`, `feature` | `tasks.type` |
+| `bug_severity` | `low`, `medium`, `high`, `critical` | `tasks.severity` |
+
+- The type itself rejects any other value, so no `CHECK (x IN (...))` list is needed.
+- The list is written once and shared. `tasks.status` and the two history columns can't drift apart.
+- Each value takes 4 bytes on disk instead of the full text.
+- Values are readable (`'in_progress'`), and they map directly to the Java enums.
+- Trade-off: a new value can be added later with `ALTER TYPE ... ADD VALUE`, but a value can't be removed.
+- From Java, a `PreparedStatement` must cast the parameter, for example `?::task_status`. Otherwise PostgreSQL refuses to compare the enum with a text value.
 
 ## Seed data
 
@@ -152,7 +250,7 @@ Simple test for each table: **every column depends on the key, the whole key, an
 
 **How the ids work.**
 - The seed never inserts an `id`. PostgreSQL creates every id itself, and `GENERATED ALWAYS` would reject a typed one.
-- The numbers you see in the seed, like `owner_id = 1`, are **foreign keys**: they point at ids PostgreSQL already created.
+- The numbers you see in the seed, like `project_id = 1`, are **foreign keys**: they point at ids PostgreSQL already created.
 - We know which id each row gets because the file starts with `TRUNCATE ... RESTART IDENTITY`. That empties the tables and starts every counter at 1 again, so rows get ids 1, 2, 3… in the order they are inserted:
 
 | Table | Ids |
