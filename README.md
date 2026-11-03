@@ -42,7 +42,7 @@ The task manager becomes a multi-user, multi-project tracker stored in PostgreSQ
 | Part | Status |
 |---|---|
 | 1. Schema, migrations, seed data | Done |
-| 2. Data layer (JDBC) | Not started |
+| 2. Data layer (JDBC) | In progress |
 | 3. Transactions | Not started |
 | 4. Reports | Not started |
 | 5. Scale and indexes | Not started |
@@ -115,3 +115,18 @@ INSERT INTO tasks (project_id, title, reporter_id, assignee_id, type, severity) 
 -- ERROR: insert or update on table "tasks" violates foreign key constraint "tasks_assignee_is_member"
 ```
 Every rule and how it is enforced is listed in [docs/SCHEMA.md](docs/SCHEMA.md#how-the-database-enforces-the-rules).
+
+### Choosing the storage
+
+One environment variable, `STORAGE`, picks where the data lives. Nothing else in the code changes.
+
+| `STORAGE` | Storage |
+|---|---|
+| `memory` (or not set) | In-memory maps, as in Assignments 1 and 2 |
+
+**Design pattern: Abstract Factory.** `RepositoryFactory` is an interface with one method per repository: `createUserRepository()`, `createProjectRepository()` and `createTaskRepository()`. Each storage has its own factory class, such as `InMemoryRepositoryFactory`. `Main` reads `STORAGE` once, picks the factory, and gives the repositories it creates to `TaskManager`.
+
+Why this pattern:
+- The three repositories are a **family** that must work together. For example, the task repository reads assignee names from the user repository. One factory creates the whole family, so memory and PostgreSQL repositories can never be mixed.
+- `TaskManager` only sees the repository interfaces. It never knows which factory made them.
+- Adding a storage means adding one new factory class and one new `STORAGE` value.
