@@ -6,11 +6,11 @@ public class Main {
 
     public static void main(String[] args) {
 
-        // the storage is chosen here; TaskManager only sees the interfaces
-        UserRepository userRepo = new InMemoryUserRepository();
-        ProjectRepository projectRepo = new InMemoryProjectRepository();
-        TaskRepository taskRepo = new InMemoryTaskRepository(userRepo);
-        TaskManager manager = new TaskManager(userRepo, projectRepo, taskRepo);
+        // the STORAGE setting picks the factory; TaskManager only sees the interfaces
+        RepositoryFactory repositories = chooseRepositoryFactory(System.getenv("STORAGE"));
+        TaskManager manager = new TaskManager(repositories.createUserRepository(),
+                                              repositories.createProjectRepository(),
+                                              repositories.createTaskRepository());
 
         // every task needs a project and a reporter
         User john = manager.createUser("John Doe", "john@example.com");
@@ -70,6 +70,15 @@ public class Main {
         for (Comment comment : manager.findComments(bug.getId())) {
             System.out.println("User " + comment.getAuthorId() + ": " + comment.getBody());
         }
+    }
+
+    // STORAGE=memory, or not set, uses memory. The PostgreSQL factory is added with the
+    // PostgreSQL repositories.
+    private static RepositoryFactory chooseRepositoryFactory(String storage) {
+        if (storage == null || storage.equalsIgnoreCase("memory")) {
+            return new InMemoryRepositoryFactory();
+        }
+        throw new IllegalArgumentException("Unknown STORAGE value '" + storage + "'. Use: memory");
     }
 
     // fills in the project and reporter, then saves the task
