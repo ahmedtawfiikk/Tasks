@@ -1,8 +1,9 @@
 import java.util.Set;
 
 enum Severity {
-LOW, MEDIUM, HIGH, CRITICAL
+    LOW, MEDIUM, HIGH, CRITICAL
 }
+
 class BugTask extends Task {
     private Severity severity;
 
@@ -14,6 +15,4 @@ class BugTask extends Task {
     public Severity getSeverity() {
         return severity;
     }
-
-
 }
