@@ -1,53 +1,42 @@
+import java.util.ArrayList;
+import java.util.List;
+
+// Strategy pattern: each filter is one rule that says yes or no to a task.
+// The in-memory repository uses these filters to list tasks.
+// PostgreSQL doesn't use them: it filters in the WHERE of its query, so it never
+// loads tasks that don't match.
 interface TaskFilter {
     boolean matches(Task task);
-}
 
-class FilterByStatus implements TaskFilter {
-    private Status status;
-
-    public FilterByStatus(Status status) {
-        this.status = status;
+    // Builds one filter from the task list's values: starts with a filter that accepts
+    // every task, then adds one filter for each value that was given (null = don't filter by this).
+    static TaskFilter of(Long projectId, Status status, Long assigneeId, String tag) {
+        TaskFilter filter = task -> true;
+        if (projectId != null) {
+            filter = new AndFilter(filter, new FilterByProject(projectId));
+        }
+        if (status != null) {
+            filter = new AndFilter(filter, new FilterByStatus(status));
+        }
+        if (assigneeId != null) {
+            filter = new AndFilter(filter, new FilterByAssignee(assigneeId));
+        }
+        if (tag != null) {
+            filter = new AndFilter(filter, new FilterByTag(tag));
+        }
+        return filter;
     }
 
-    public boolean matches(Task task) {
-        return task.getStatus() == status;
-    }
-}
 
-class FilterByTag implements TaskFilter {
-    private String tag;
-
-    public FilterByTag(String tag) {
-        this.tag = tag;
-    }
-
-    public boolean matches(Task task) {
-        return task.getTags().contains(tag);
-    }
-}
-
-class FilterBySeverity implements TaskFilter {
-    private Severity severity;
-
-    public FilterBySeverity(Severity severity) {
-        this.severity = severity;
-    }
-
-    public boolean matches(Task task) {
-        return task instanceof BugTask && ((BugTask) task).getSeverity() == severity;
-    }
-}
-
-class AndFilter implements TaskFilter {
-    private TaskFilter first;
-    private TaskFilter second;
-
-    public AndFilter(TaskFilter first, TaskFilter second) {
-        this.first = first;
-        this.second = second;
-    }
-
-    public boolean matches(Task task) {
-        return first.matches(task) && second.matches(task);
+    
+    // the tasks this filter accepts, in the same order
+    default List<Task> apply(List<Task> tasks) {
+        List<Task> matching = new ArrayList<>();
+        for (Task task : tasks) {
+            if (matches(task)) {
+                matching.add(task);
+            }
+        }
+        return matching;
     }
 }
