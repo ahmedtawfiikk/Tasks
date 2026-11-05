@@ -2,6 +2,7 @@
 target/
 
 # Compiled classes
+out/
 *.class
 
 # Local environment files (may contain passwords)

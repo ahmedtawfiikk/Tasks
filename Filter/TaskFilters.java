@@ -1,6 +1,18 @@
-interface TaskFilter {
-    boolean matches(Task task);
+// The filter rules. Each class is one rule, using the TaskFilter interface.
+
+class FilterByProject implements TaskFilter {
+    private long projectId;
+
+    public FilterByProject(long projectId) {
+        this.projectId = projectId;
+    }
+
+    public boolean matches(Task task) {
+        return task.getProjectId() == projectId;
+    }
 }
+
+
 
 class FilterByStatus implements TaskFilter {
     private Status status;
@@ -14,6 +26,25 @@ class FilterByStatus implements TaskFilter {
     }
 }
 
+
+
+
+class FilterByAssignee implements TaskFilter {
+    private long assigneeId;
+
+    public FilterByAssignee(long assigneeId) {
+        this.assigneeId = assigneeId;
+    }
+
+    public boolean matches(Task task) {
+        // getAssigneeId() is null when the task is unassigned
+        return task.getAssigneeId() != null && task.getAssigneeId() == assigneeId;
+    }
+}
+
+
+
+// Tag names ignore case (docs/SCHEMA.md), so "Backend" matches "backend".
 class FilterByTag implements TaskFilter {
     private String tag;
 
@@ -22,9 +53,16 @@ class FilterByTag implements TaskFilter {
     }
 
     public boolean matches(Task task) {
-        return task.getTags().contains(tag);
+        for (String name : task.getTags()) {
+            if (name.equalsIgnoreCase(tag)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
+
+
 
 class FilterBySeverity implements TaskFilter {
     private Severity severity;
@@ -37,6 +75,9 @@ class FilterBySeverity implements TaskFilter {
         return task instanceof BugTask && ((BugTask) task).getSeverity() == severity;
     }
 }
+
+
+
 
 class AndFilter implements TaskFilter {
     private TaskFilter first;

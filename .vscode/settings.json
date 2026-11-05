@@ -1,0 +1,5 @@
+{
+    "java.project.sourcePaths": [".", "Model", "Repository/Interfaces", "Repository/InMemory", "Repository/Postgres", "Service", "Sort", "Filter"],
+    "java.project.referencedLibraries": ["lib/**/*.jar"],
+    "java.project.outputPath": "out"
+}

@@ -1,68 +1,24 @@
+import java.util.Scanner;
 
-import java.util.Set;
-
+// Starts the app: picks the storage from STORAGE, builds TaskManager, runs the console.
 public class Main {
 
     public static void main(String[] args) {
+        RepositoryFactory repositories = chooseRepositoryFactory(System.getenv("STORAGE"));
+        TaskManager manager = new TaskManager(repositories.createUserRepository(),
+                                              repositories.createProjectRepository(),
+                                              repositories.createTaskRepository());
+        new ConsoleApp(manager, new Scanner(System.in)).run();
+    }
 
-        TaskManager manager = new TaskManager();
-        manager.addTask(new Task("Buy groceries", Set.of("shopping", "errands"), 1));
-        manager.addTask(new Task("Finish project", Set.of("work", "urgent"), 2));
-        manager.addTask(new Task("Call mom", Set.of("family"), 3));
-
-        Task task1 = manager.findTaskById(1);
-        System.out.println("Add new tag 'today': " + task1.addTag("today"));
-        System.out.println("Add duplicate tag 'shopping': " + task1.addTag("shopping"));
-
-        TaskFactory factory = new TaskFactory();
-        manager.addTask(factory.createTask("bug", "Fix login bug", Set.of("bug", "urgent"), 4, Severity.HIGH));
-        manager.addTask(factory.createTask("feature", "Add dark mode", Set.of("feature"), 5, 3.5f));
-
-        manager.markTaskAsDone(2);
-
-        System.out.println("\n--- Sorted by ID ---");
-        manager.listTasks(new SortById());
-
-        System.out.println("\n--- Sorted by title ---");
-        manager.listTasks(new SortByTitle());
-
-        System.out.println("\n--- Sorted by status (pending first) ---");
-        manager.listTasks(new SortByStatus());
-
-        System.out.println("\n--- Filter: pending tasks, sorted by title ---");
-        manager.listTasks(new FilterByStatus(Status.PENDING), new SortByTitle());
-
-        System.out.println("\n--- Filter: tagged 'urgent' ---");
-        manager.listTasks(new FilterByTag("urgent"), new SortById());
-
-        System.out.println("\n--- Filter: high severity bugs ---");
-        manager.listTasks(new FilterBySeverity(Severity.HIGH), new SortById());
-
-        System.out.println("\n--- Filter: urgent AND pending ---");
-        manager.listTasks(new AndFilter(new FilterByTag("urgent"), new FilterByStatus(Status.PENDING)), new SortById());
-
-        System.out.println("\n--- Filter: tagged 'school' ---");
-        manager.listTasks(new FilterByTag("school"), new SortById());
-
+    // STORAGE=memory (or not set) uses memory; STORAGE=postgres uses PostgreSQL
+    private static RepositoryFactory chooseRepositoryFactory(String storage) {
+        if (storage == null || storage.equalsIgnoreCase("memory")) {
+            return new InMemoryRepositoryFactory();
+        }
+        if (storage.equalsIgnoreCase("postgres")) {
+            return new PostgresRepositoryFactory();
+        }
+        throw new IllegalArgumentException("Unknown STORAGE value '" + storage + "'. Use: memory or postgres");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
