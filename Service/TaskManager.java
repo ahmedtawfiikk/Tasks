@@ -21,12 +21,21 @@ class TaskManager {
         return projects.create(name, key, ownerId);
     }
 
+    // returns null if there is no project with this key
+    public Project findProjectByKey(String key) {
+        return projects.findByKey(key);
+    }
+
     public void addMember(long projectId, long userId, Role role) {
         projects.addMember(projectId, userId, role);
     }
 
-    // returns the saved task with its new id
+    // returns the saved task with its new id.
+    // A task is created without tags; tags are added after, with addTag.
     public Task createTask(Task task) {
+        if (!task.getTags().isEmpty()) {
+            throw new IllegalArgumentException("Create the task first, then add its tags with addTag");
+        }
         return tasks.create(task);
     }
 
@@ -53,8 +62,8 @@ class TaskManager {
     }
 
     // every filter can be null, meaning "don't filter by this"; page starts at 1
-    public List<TaskListItem> listTasks(Long projectId, Status status, Long assigneeId, String tag,
-                                        SortStrategy sort, int page, int pageSize) {
+    public List<Task> listTasks(Long projectId, Status status, Long assigneeId, String tag,
+                                SortStrategy sort, int page, int pageSize) {
         return tasks.findTasks(projectId, status, assigneeId, tag, sort, page, pageSize);
     }
 

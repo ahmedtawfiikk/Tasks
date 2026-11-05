@@ -1,10 +1,7 @@
-
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
-
-
 
 enum Status {
     PENDING,
@@ -20,6 +17,7 @@ class Task {
     private Status status = Status.PENDING;
     private long reporterId;
     private Long assigneeId;              // null = unassigned
+    private String assigneeName;          // set by the task list; null = unassigned
     private LocalDate dueDate;            // null = no due date
     private OffsetDateTime createdAt = OffsetDateTime.now();
     private OffsetDateTime completedAt;   // set only when status is DONE
@@ -31,7 +29,7 @@ class Task {
         this.id = id;
     }
 
-    protected Set<String> getTags() {
+    public Set<String> getTags() {
         return tags;
     }
 
@@ -94,6 +92,14 @@ class Task {
 
     public void setAssigneeId(Long assigneeId) {
         this.assigneeId = assigneeId;
+    }
+
+    public String getAssigneeName() {
+        return assigneeName;
+    }
+
+    public void setAssigneeName(String assigneeName) {
+        this.assigneeName = assigneeName;
     }
 
     public LocalDate getDueDate() {

@@ -1,8 +1,11 @@
 // Creates the in-memory set of repositories. Used when STORAGE=memory.
+// The three repositories share data, like tables in one database, so each is made once:
+// projects check that owners and members are users, and tasks check users and memberships.
 class InMemoryRepositoryFactory implements RepositoryFactory {
 
-    // the task repository needs this same user repository to find assignee names
     private final UserRepository users = new InMemoryUserRepository();
+    private final InMemoryProjectRepository projects = new InMemoryProjectRepository(users);
+    private final TaskRepository tasks = new InMemoryTaskRepository(users, projects);
 
     @Override
     public UserRepository createUserRepository() {
@@ -11,11 +14,11 @@ class InMemoryRepositoryFactory implements RepositoryFactory {
 
     @Override
     public ProjectRepository createProjectRepository() {
-        return new InMemoryProjectRepository();
+        return projects;
     }
 
     @Override
     public TaskRepository createTaskRepository() {
-        return new InMemoryTaskRepository(users);
+        return tasks;
     }
 }
