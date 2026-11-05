@@ -11,11 +11,14 @@ public class Main {
         new ConsoleApp(manager, new Scanner(System.in)).run();
     }
 
-    // STORAGE=memory (or not set) uses memory
+    // STORAGE=memory (or not set) uses memory; STORAGE=postgres uses PostgreSQL
     private static RepositoryFactory chooseRepositoryFactory(String storage) {
         if (storage == null || storage.equalsIgnoreCase("memory")) {
             return new InMemoryRepositoryFactory();
         }
-        throw new IllegalArgumentException("Unknown STORAGE value '" + storage + "'. Use: memory");
+        if (storage.equalsIgnoreCase("postgres")) {
+            return new PostgresRepositoryFactory();
+        }
+        throw new IllegalArgumentException("Unknown STORAGE value '" + storage + "'. Use: memory or postgres");
     }
 }
