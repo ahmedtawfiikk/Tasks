@@ -121,12 +121,12 @@ Every rule and how it is enforced is listed in [docs/SCHEMA.md](docs/SCHEMA.md#h
 
 Compile, then run. `lib/` holds the PostgreSQL JDBC driver, the only dependency.
 ```powershell
-javac -cp "lib/*" -d out *.java Model/*.java Repository/Interfaces/*.java Repository/InMemory/*.java Repository/Postgres/*.java Service/*.java Sort/*.java Filter/*.java
+javac -cp "lib/*" -d out *.java Model/*.java Repository/Interfaces/*.java Repository/InMemory/*.java Repository/Postgres/*.java Service/*.java Sort/*.java Filter/*.java Import/*.java
 ```
 ```powershell
 $env:STORAGE = "postgres"; java -cp "lib/*;out" Main
 ```
-The app shows a numbered menu: create user, create project, add member, create bug or feature task, assign, change status, tag, comment, list tasks (default, filtered by project, status, assignee and tag, sorted, or both; always paginated), show one task with its tags, comments and status history, and move a task to another project.
+The app shows a numbered menu: create user, create project, add member, create bug or feature task, assign, change status, tag, comment, list tasks (default, filtered by project, status, assignee and tag, sorted, or both; always paginated), show one task with its tags, comments and status history, move a task to another project, and import tasks from a CSV file.
 
 To print every SQL statement the app runs, turn on the debug flag:
 ```powershell
@@ -251,3 +251,72 @@ With the switch off (`$env:FAIL_MOVE_HALFWAY = "false"`), moving task 3 to INV w
 ----+-----+-------------------------------------------------------+----------+---------
   3 | INV | api (project 2), backend (project 2), urgent (project 2) |        2 |       2
 ```
+
+### Importing tasks from CSV
+
+Menu option 13 is `import tasks.csv PAY`: it asks for the file, the project key and the reporter's user id. The CSV has no reporter column, and every task needs a reporter. The columns are:
+```
+type,title,description,severity,estimate_hours,assignee_email,due_date,tags
+```
+`tags` is a `|`-separated list. The first line is the header. A value can't contain a comma.
+
+**All or nothing.** Every row is checked before anything is written. If any row is bad, nothing is inserted, and the app prints every bad row with its line number and the reason. The checks are:
+- wrong type (not `bug` or `feature`)
+- a bug without a severity, or a severity that doesn't exist
+- an estimate that is missing, not a number, or out of range (more than 0, at most 200)
+- an unknown assignee, or an assignee who is not a member of the project
+- a bad due date (not `YYYY-MM-DD`)
+- a duplicate title inside the file (trimmed, ignoring case)
+- an empty title, a bug with an estimate, a feature with a severity, or a line without 8 columns
+
+Tags repeated in one row (`api|API|api`) count once.
+
+**A fixed number of queries.** However many rows the file has, the import runs the same statements:
+
+| Step | Statement |
+|---|---|
+| Users of all the emails in the file | `SELECT id, email FROM users WHERE lower(email) = ANY (?)` |
+| The project and the reporter | `findByKey`, `findById` |
+| The project's members | `SELECT user_id FROM project_members WHERE project_id = ?` |
+| Tags, tasks, task tags | 3 `INSERT`s, each sent as one JDBC batch (`addBatch` / `executeBatch`) |
+
+The checks use the looked-up maps, so a row never runs a query. The 3 batches run in one transaction, so killing the app in the middle of an import leaves the database unchanged.
+
+- **Tags:** each tag name of the file is sent once, with `ON CONFLICT DO NOTHING`. The unique index on `(project_id, lower(name))` makes a tag the project already has a conflict, so the database skips it.
+- **Tasks:** `getGeneratedKeys()` gives back the new task ids, in the same order as the batch.
+- **Task tags:** `INSERT ... SELECT` sends the tag name, and the database finds that tag's id in the project.
+
+The code is split by job, in `Import/`:
+
+| Class | Its one job |
+|---|---|
+| `CsvReader` | Reads the file and splits each line into a `CsvRow` |
+| `CsvValidator` | Checks every row and turns the good ones into tasks with `TaskFactory` |
+| `CsvImporter` | Runs the steps in order: read, look up, check, then save all or nothing |
+| `ImportResult` | How many tasks were saved, or every bad row |
+| `ImportRepository` | The import's database work (`PostgresImportRepository`). In memory mode it prints "CSV import works only with STORAGE=postgres" |
+
+**Sample files** in `samples/`:
+- `tasks_valid.csv`: 5 good rows, including `api|API|api` and an email in capitals.
+- `tasks_invalid.csv`: 8 different kinds of errors, plus one good row that is not imported either:
+```
+Nothing was imported. 8 bad rows:
+  Line 2: wrong type 'task' (use bug or feature)
+  Line 3: a bug needs a severity
+  Line 4: estimate 500 is out of range (more than 0, at most 200)
+  Line 5: unknown assignee nobody@example.com
+  Line 6: assignee ahmed@example.com is not a member of the project
+  Line 7: bad due date '2026-13-45' (use YYYY-MM-DD)
+  Line 9: duplicate title 'duplicate TITLE' (also on line 8)
+  Line 10: has 4 columns, expected 8
+```
+
+**Timing: 10,000 rows.** `TasksCsvGenerator` writes a valid file whose assignees are the PAY members from the seed:
+```powershell
+java -cp out TasksCsvGenerator samples/tasks_10k.csv 10000
+```
+Importing it into PAY on my machine:
+```
+Imported 10000 tasks in 2106 ms
+```
+A second run took 2047 ms. Both are under the 10-second limit. With one bad row added at the end (line 10002), nothing was imported and the task count didn't change.
