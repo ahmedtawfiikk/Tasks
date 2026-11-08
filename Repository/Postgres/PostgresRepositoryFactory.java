@@ -18,4 +18,9 @@ class PostgresRepositoryFactory implements RepositoryFactory {
     public TaskRepository createTaskRepository() {
         return new PostgresTaskRepository(database, mapper);
     }
+
+    @Override
+    public ImportRepository createImportRepository() {
+        return new PostgresImportRepository(database, mapper);
+    }
 }

@@ -30,6 +30,13 @@ class Database {
         return connection.prepareStatement(sql);
     }
 
+    // like prepare, but the statement also hands back the id of each row it inserts.
+    // Used with batches: after executeBatch, getGeneratedKeys() gives the ids in insert order.
+    PreparedStatement prepareReturningId(Connection connection, String sql) throws SQLException {
+        logger.log(sql);
+        return connection.prepareStatement(sql, new String[] {"id"});
+    }
+
     // runs the work on a new connection with auto-commit: each statement is saved on its own
     <T> T run(Work<T> work) {
         try (Connection connection = DriverManager.getConnection(url, user, password)) {
