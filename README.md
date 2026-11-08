@@ -44,7 +44,7 @@ The task manager becomes a multi-user, multi-project tracker stored in PostgreSQ
 |---|---|
 | 1. Schema, migrations, seed data | Done |
 | 2. Data layer (JDBC) | Done |
-| 3. Transactions | Not started |
+| 3. Transactions | In progress |
 | 4. Reports | Not started |
 | 5. Scale and indexes | Not started |
 
@@ -126,7 +126,7 @@ javac -cp "lib/*" -d out *.java Model/*.java Repository/Interfaces/*.java Reposi
 ```powershell
 $env:STORAGE = "postgres"; java -cp "lib/*;out" Main
 ```
-The app shows a numbered menu: create user, create project, add member, create bug or feature task, assign, change status, tag, comment, list tasks (default, filtered by project, status, assignee and tag, sorted, or both; always paginated) and show one task with its tags, comments and status history.
+The app shows a numbered menu: create user, create project, add member, create bug or feature task, assign, change status, tag, comment, list tasks (default, filtered by project, status, assignee and tag, sorted, or both; always paginated), show one task with its tags, comments and status history, and move a task to another project.
 
 To print every SQL statement the app runs, turn on the debug flag:
 ```powershell
@@ -195,3 +195,59 @@ PostgreSQL sorts the rows itself, with `LIMIT` and `OFFSET`. Java never loads al
 2. The tags of all those tasks at once: `WHERE tt.task_id = ANY (?)`, with the task ids as one array parameter.
 
 The tasks from query 1 go into a `HashMap` by id. Query 2's rows are read once, and each row finds its task in the map in O(1). That's one pass, with no loop inside a loop. Turn on `SQL_DEBUG=true` and run "List tasks" to see the 2 statements.
+
+### Moving a task to another project
+
+Menu option 12 moves a task to another project, in one transaction:
+1. Read the names of the task's tags.
+2. Delete the task's links to the old project's tags. `task_tags` points at the task **and** its project, so the task can't change project while these links exist.
+3. Change the task's `project_id`. If the assignee is not a member of the target project, the foreign key `tasks_assignee_is_member` rejects it.
+4. Link each tag again by name: the target project's tag with the same name (ignoring case), or a new one.
+
+Comments and status history point at the task id only, so they stay with the task. If any step fails, everything is rolled back.
+
+**Proving it is atomic.** `FAIL_MOVE_HALFWAY=true` is a hidden test switch: the move throws an exception after step 3, when the tag links are already deleted and the task already points at the new project. On the seed data, task 3 is in PAY with 3 tags, 2 comments and 2 history rows:
+
+```sql
+SELECT t.id, p.key, string_agg(g.name || ' (project ' || g.project_id || ')', ', ' ORDER BY g.name) AS tags,
+       (SELECT count(*) FROM comments c WHERE c.task_id = t.id) AS comments,
+       (SELECT count(*) FROM task_status_history h WHERE h.task_id = t.id) AS history
+FROM tasks t
+JOIN projects p ON p.id = t.project_id
+LEFT JOIN task_tags tt ON tt.task_id = t.id
+LEFT JOIN tags g ON g.id = tt.tag_id
+WHERE t.id = 3
+GROUP BY t.id, p.key;
+```
+```
+ id | key |                         tags                          | comments | history
+----+-----+-------------------------------------------------------+----------+---------
+  3 | PAY | api (project 1), backend (project 1), urgent (project 1) |        2 |       2
+```
+
+Move it to INV with the switch on:
+```powershell
+$env:STORAGE = "postgres"; $env:FAIL_MOVE_HALFWAY = "true"; $env:SQL_DEBUG = "true"; java -cp "lib/*;out" Main
+```
+```
+Choose: 12
+Task id: 3
+Target project key: INV
+[SQL] SELECT g.name ...
+[SQL] DELETE FROM task_tags WHERE task_id = ?
+[SQL] UPDATE tasks SET project_id = ? WHERE id = ?
+Error: FAIL_MOVE_HALFWAY is on: the move stopped halfway
+```
+The same query afterwards gives exactly the same row: task 3 is still in PAY with its 3 PAY tags, and the `tags` table still has 9 rows. The `DELETE` and the `UPDATE` were rolled back.
+
+Moving task 3 to SAL fails too, because its assignee (user 1) is not a member of SAL:
+```
+Error: ERROR: insert or update on table "tasks" violates foreign key constraint "tasks_assignee_is_member"
+```
+
+With the switch off (`$env:FAIL_MOVE_HALFWAY = "false"`), moving task 3 to INV works. It reuses INV's `backend` and `urgent` tags and creates `api` in INV, and the comments and history are still there:
+```
+ id | key |                         tags                          | comments | history
+----+-----+-------------------------------------------------------+----------+---------
+  3 | INV | api (project 2), backend (project 2), urgent (project 2) |        2 |       2
+```
