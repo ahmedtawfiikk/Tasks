@@ -92,41 +92,56 @@ class PostgresTaskRepository implements TaskRepository {
     @Override
     public void changeStatus(long taskId, Status newStatus, long changedBy) {
         db.inTransaction(c -> {
-            Status oldStatus;
-            try (PreparedStatement ps = db.prepare(c, "SELECT status FROM tasks WHERE id = ?")) {
-                ps.setLong(1, taskId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        throw new IllegalArgumentException("No task with id " + taskId);
-                    }
-                    oldStatus = mapper.status(rs.getString("status"));
-                }
-            }
+            Status oldStatus = findStatus(c, taskId);
             if (oldStatus == newStatus) {
                 throw new IllegalArgumentException("Task " + taskId + " is already " + newStatus);
             }
-            // completed_at is set when the task becomes done and cleared otherwise
-            try (PreparedStatement ps = db.prepare(c, """
-                    UPDATE tasks
-                    SET status = CAST(? AS task_status),
-                        completed_at = CASE WHEN ? THEN now() ELSE NULL END
-                    WHERE id = ?""")) {
-                ps.setString(1, mapper.text(newStatus));
-                ps.setBoolean(2, newStatus == Status.DONE);
-                ps.setLong(3, taskId);
-                ps.executeUpdate();
-            }
-            try (PreparedStatement ps = db.prepare(c, """
-                    INSERT INTO task_status_history (task_id, old_status, new_status, changed_by)
-                    VALUES (?, CAST(? AS task_status), CAST(? AS task_status), ?)""")) {
-                ps.setLong(1, taskId);
-                ps.setString(2, mapper.text(oldStatus));
-                ps.setString(3, mapper.text(newStatus));
-                ps.setLong(4, changedBy);
-                ps.executeUpdate();
-            }
+            updateStatus(c, taskId, newStatus);
+            addStatusHistory(c, taskId, oldStatus, newStatus, changedBy);
             return null;
         });
+    }
+
+    // the task's current status, or an error if there is no such task
+    private Status findStatus(Connection c, long taskId) throws SQLException {
+        try (PreparedStatement ps = db.prepare(c, "SELECT status FROM tasks WHERE id = ?")) {
+            ps.setLong(1, taskId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    throw new IllegalArgumentException("No task with id " + taskId);
+                }
+                return mapper.status(rs.getString("status"));
+            }
+        }
+    }
+
+    // done: completed_at = now(); any other status: completed_at = NULL
+    private void updateStatus(Connection c, long taskId, Status newStatus) throws SQLException {
+        String sql;
+        if (newStatus == Status.DONE) {
+            sql = "UPDATE tasks SET status = ?, completed_at = now() WHERE id = ?";
+        } else {
+            sql = "UPDATE tasks SET status = ?, completed_at = NULL WHERE id = ?";
+        }
+        try (PreparedStatement ps = db.prepare(c, sql)) {
+            ps.setObject(1, mapper.text(newStatus), Types.OTHER);
+            ps.setLong(2, taskId);
+            ps.executeUpdate();
+        }
+    }
+
+    // one row in the history: who changed the task from which status to which
+    private void addStatusHistory(Connection c, long taskId, Status oldStatus, Status newStatus,
+                                  long changedBy) throws SQLException {
+        try (PreparedStatement ps = db.prepare(c, """
+                INSERT INTO task_status_history (task_id, old_status, new_status, changed_by)
+                VALUES (?, ?, ?, ?)""")) {
+            ps.setLong(1, taskId);
+            ps.setObject(2, mapper.text(oldStatus), Types.OTHER);
+            ps.setObject(3, mapper.text(newStatus), Types.OTHER);
+            ps.setLong(4, changedBy);
+            ps.executeUpdate();
+        }
     }
 
     // one transaction: the tag (if new) and the link to the task are saved together
