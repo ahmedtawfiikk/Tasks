@@ -44,6 +44,7 @@ class ConsoleApp {
         System.out.println("10 List tasks");
         System.out.println("11 Show task");
         System.out.println("12 Move task to another project");
+        System.out.println("13 Import tasks from CSV");
         System.out.println("0  Exit");
     }
 
@@ -61,6 +62,7 @@ class ConsoleApp {
             case "10" -> listTasks();
             case "11" -> showTask();
             case "12" -> moveTask();
+            case "13" -> importCsv();
             default -> System.out.println("Unknown choice: " + choice);
         }
     }
@@ -133,6 +135,26 @@ class ConsoleApp {
         long targetProjectId = projectId(ask("Target project key"));
         manager.moveTask(taskId, targetProjectId);
         System.out.println("Moved task " + taskId);
+    }
+
+    // import tasks.csv PAY: every bad row is printed, or every task is saved
+    private void importCsv() {
+        String filePath = ask("CSV file");
+        String projectKey = ask("Project key");
+        long reporterId = askLong("Reporter user id");
+
+        long start = System.currentTimeMillis();
+        ImportResult result = manager.importCsv(filePath, projectKey, reporterId);
+        long millis = System.currentTimeMillis() - start;
+
+        if (!result.errors().isEmpty()) {
+            System.out.println("Nothing was imported. " + result.errors().size() + " bad rows:");
+            for (String error : result.errors()) {
+                System.out.println("  " + error);
+            }
+            return;
+        }
+        System.out.println("Imported " + result.importedCount() + " tasks in " + millis + " ms");
     }
 
     private void comment() {
