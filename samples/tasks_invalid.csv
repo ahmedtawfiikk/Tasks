@@ -1,0 +1,11 @@
+type,title,description,severity,estimate_hours,assignee_email,due_date,tags
+task,Row with a wrong type,,,,,,
+bug,Bug without a severity,,,,,,backend
+feature,Feature that is too big,,,500,,,
+bug,Assignee nobody knows,,high,,nobody@example.com,,
+bug,Assignee from another project,,high,,ahmed@example.com,,
+bug,Due date that does not exist,,low,,,2026-13-45,
+bug,Duplicate title,,low,,,,
+bug,  duplicate TITLE  ,,low,,,,
+bug,Row with too few columns,,low
+bug,This row is fine but is not imported either,,low,,jane@example.com,,api
