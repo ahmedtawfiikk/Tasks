@@ -6,11 +6,19 @@ class TaskManager {
     private final UserRepository users;
     private final ProjectRepository projects;
     private final TaskRepository tasks;
+    private final CsvImporter csvImporter;
 
-    TaskManager(UserRepository users, ProjectRepository projects, TaskRepository tasks) {
+    TaskManager(UserRepository users, ProjectRepository projects, TaskRepository tasks,
+                ImportRepository imports) {
         this.users = users;
         this.projects = projects;
         this.tasks = tasks;
+        this.csvImporter = new CsvImporter(users, projects, imports);
+    }
+
+    // loads every task of the CSV file into the project, all or nothing
+    public ImportResult importCsv(String filePath, String projectKey, long reporterId) {
+        return csvImporter.importFile(filePath, projectKey, reporterId);
     }
 
     public User createUser(String fullName, String email) {
