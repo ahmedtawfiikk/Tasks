@@ -43,6 +43,7 @@ class ConsoleApp {
         System.out.println("9  Comment on task");
         System.out.println("10 List tasks");
         System.out.println("11 Show task");
+        System.out.println("12 Move task to another project");
         System.out.println("0  Exit");
     }
 
@@ -59,6 +60,7 @@ class ConsoleApp {
             case "9" -> comment();
             case "10" -> listTasks();
             case "11" -> showTask();
+            case "12" -> moveTask();
             default -> System.out.println("Unknown choice: " + choice);
         }
     }
@@ -124,6 +126,13 @@ class ConsoleApp {
     private void tag() {
         manager.addTag(askLong("Task id"), ask("Tag"));
         System.out.println("Done");
+    }
+
+    private void moveTask() {
+        long taskId = askLong("Task id");
+        long targetProjectId = projectId(ask("Target project key"));
+        manager.moveTask(taskId, targetProjectId);
+        System.out.println("Moved task " + taskId);
     }
 
     private void comment() {
