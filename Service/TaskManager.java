@@ -57,6 +57,10 @@ class TaskManager {
         tasks.addTag(taskId, tagName);
     }
 
+    public void moveTask(long taskId, long targetProjectId) {
+        tasks.moveTask(taskId, targetProjectId);
+    }
+
     public Comment addComment(long taskId, long authorId, String body) {
         return tasks.addComment(taskId, authorId, body);
     }

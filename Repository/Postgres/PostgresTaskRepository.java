@@ -14,6 +14,10 @@ class PostgresTaskRepository implements TaskRepository {
     private final Database db;
     private final RowMapper mapper;
 
+    // Hidden test switch for moveTask: with FAIL_MOVE_HALFWAY=true the move throws an
+    // exception halfway, to prove the transaction leaves the database unchanged.
+    private final boolean failMoveHalfway = "true".equalsIgnoreCase(System.getenv("FAIL_MOVE_HALFWAY"));
+
     PostgresTaskRepository(Database db, RowMapper mapper) {
         this.db = db;
         this.mapper = mapper;
@@ -159,6 +163,75 @@ class PostgresTaskRepository implements TaskRepository {
                 }
             }
             saveTag(c, taskId, projectId, tagName);
+            return null;
+        });
+    }
+
+    // Gives the task a tag. A tag belongs to a project, and its name is used once per project,
+    // ignoring case: if PAY has "backend", tagging a PAY task "Backend" uses "backend".
+    private void saveTag(Connection c, long taskId, long projectId, String tagName) throws SQLException {
+        Long tagId = findTagId(c, projectId, tagName);
+        if (tagId == null) {
+            tagId = createTag(c, projectId, tagName);
+        }
+
+        // link the tag to the task; if the task already has it, do nothing
+        try (PreparedStatement ps = db.prepare(c, """
+                INSERT INTO task_tags (task_id, tag_id, project_id) VALUES (?, ?, ?)
+                ON CONFLICT DO NOTHING""")) {
+            ps.setLong(1, taskId);
+            ps.setLong(2, tagId);
+            ps.setLong(3, projectId);
+            ps.executeUpdate();
+        }
+    }
+
+    // One transaction: if any step fails, everything is rolled back and the task stays where it was.
+    // Comments and status history point at the task id only, so they stay with the task.
+    @Override
+    public void moveTask(long taskId, long targetProjectId) {
+        db.inTransaction(c -> {
+            // 1. remember the names of the task's tags
+            List<String> tagNames = new ArrayList<>();
+            try (PreparedStatement ps = db.prepare(c, """
+                    SELECT g.name
+                    FROM task_tags tt
+                    JOIN tags g ON g.id = tt.tag_id
+                    WHERE tt.task_id = ?""")) {
+                ps.setLong(1, taskId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        tagNames.add(rs.getString("name"));
+                    }
+                }
+            }
+
+            // 2. remove the links to the old project's tags.
+            //    task_tags points at the task AND its project, so the task can't change
+            //    project while these links exist.
+            try (PreparedStatement ps = db.prepare(c, "DELETE FROM task_tags WHERE task_id = ?")) {
+                ps.setLong(1, taskId);
+                ps.executeUpdate();
+            }
+
+            // 3. move the task. If the assignee is not a member of the target project,
+            //    the foreign key tasks_assignee_is_member rejects this.
+            try (PreparedStatement ps = db.prepare(c, "UPDATE tasks SET project_id = ? WHERE id = ?")) {
+                ps.setLong(1, targetProjectId);
+                ps.setLong(2, taskId);
+                if (ps.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("No task with id " + taskId);
+                }
+            }
+
+            if (failMoveHalfway) {
+                throw new IllegalStateException("FAIL_MOVE_HALFWAY is on: the move stopped halfway");
+            }
+
+            // 4. link the tags again: the target project's tag with the same name, or a new one
+            for (String tagName : tagNames) {
+                saveTag(c, taskId, targetProjectId, tagName);
+            }
             return null;
         });
     }
@@ -322,25 +395,6 @@ class PostgresTaskRepository implements TaskRepository {
                     task.addTag(rs.getString("name"));
                 }
             }
-        }
-    }
-
-    // Gives the task a tag. A tag belongs to a project, and its name is used once per project,
-    // ignoring case: if PAY has "backend", tagging a PAY task "Backend" uses "backend".
-    private void saveTag(Connection c, long taskId, long projectId, String tagName) throws SQLException {
-        Long tagId = findTagId(c, projectId, tagName);
-        if (tagId == null) {
-            tagId = createTag(c, projectId, tagName);
-        }
-
-        // link the tag to the task; if the task already has it, do nothing
-        try (PreparedStatement ps = db.prepare(c, """
-                INSERT INTO task_tags (task_id, tag_id, project_id) VALUES (?, ?, ?)
-                ON CONFLICT DO NOTHING""")) {
-            ps.setLong(1, taskId);
-            ps.setLong(2, tagId);
-            ps.setLong(3, projectId);
-            ps.executeUpdate();
         }
     }
 
