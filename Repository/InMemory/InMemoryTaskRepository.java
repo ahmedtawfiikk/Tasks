@@ -113,6 +113,27 @@ class InMemoryTaskRepository implements TaskRepository {
         task.addTag(tag.getName());   // the project's spelling; the Set ignores a tag the task already has
     }
 
+    // All the checks come first, so if one fails the task is not changed at all.
+    @Override
+    public void moveTask(long taskId, long targetProjectId) {
+        Task task = getTask(taskId);
+        if (projects.findById(targetProjectId) == null) {
+            throw new IllegalArgumentException("No project with id " + targetProjectId);
+        }
+        checkAssignee(targetProjectId, task.getAssigneeId());
+
+        // the task keeps its tags by name: each one becomes the target project's tag
+        List<String> newTagNames = new ArrayList<>();
+        for (String tagName : task.getTags()) {
+            newTagNames.add(findOrCreateTag(targetProjectId, tagName).getName());
+        }
+
+        task.setProjectId(targetProjectId);
+        task.getTags().clear();
+        task.getTags().addAll(newTagNames);
+        // comments and history are kept by task id, so they stay with the task
+    }
+
     // The project's tag with this name (ignoring case), or a new one, as in PostgreSQL:
     // if PAY has "backend", tagging a PAY task "Backend" uses "backend".
     private Tag findOrCreateTag(long projectId, String name) {

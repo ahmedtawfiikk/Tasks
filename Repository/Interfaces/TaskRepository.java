@@ -16,6 +16,12 @@ interface TaskRepository {
 
     void addTag(long taskId, String tagName);
 
+    // Moves the task to another project, all or nothing.
+    // The task keeps its tags by name: each one becomes the target project's tag with that name.
+    // Fails if the assignee is not a member of the target project.
+    // Comments and status history stay with the task.
+    void moveTask(long taskId, long targetProjectId);
+
     Comment addComment(long taskId, long authorId, String body);
 
     // every filter argument can be null, meaning "don't filter by this"; page starts at 1.

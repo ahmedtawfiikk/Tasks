@@ -8,4 +8,8 @@ interface RepositoryFactory {
     ProjectRepository createProjectRepository();
 
     TaskRepository createTaskRepository();
+
+    ImportRepository createImportRepository();
+
+    ReportRepository createReportRepository();
 }

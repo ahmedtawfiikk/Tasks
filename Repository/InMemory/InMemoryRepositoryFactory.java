@@ -21,4 +21,14 @@ class InMemoryRepositoryFactory implements RepositoryFactory {
     public TaskRepository createTaskRepository() {
         return tasks;
     }
+
+    @Override
+    public ImportRepository createImportRepository() {
+        return new InMemoryImportRepository();
+    }
+
+    @Override
+    public ReportRepository createReportRepository() {
+        return new InMemoryReportRepository();
+    }
 }

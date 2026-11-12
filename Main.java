@@ -7,7 +7,9 @@ public class Main {
         RepositoryFactory repositories = chooseRepositoryFactory(System.getenv("STORAGE"));
         TaskManager manager = new TaskManager(repositories.createUserRepository(),
                                               repositories.createProjectRepository(),
-                                              repositories.createTaskRepository());
+                                              repositories.createTaskRepository(),
+                                              repositories.createImportRepository(),
+                                              repositories.createReportRepository());
         new ConsoleApp(manager, new Scanner(System.in)).run();
     }
 

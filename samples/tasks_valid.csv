@@ -1,0 +1,6 @@
+type,title,description,severity,estimate_hours,assignee_email,due_date,tags
+bug,Fix receipt rounding,Totals are one cent off,high,,jane@example.com,2026-12-01,backend|urgent
+feature,Export payments to Excel,Finance wants a monthly file,,8,alice@example.com,,backend|reports
+bug,Pay button hidden on small screens,,low,,,2026-11-30,frontend
+feature,Add Apple Pay,Support Apple Pay at checkout,,40,JOHN@example.com,2027-01-15,api|API|api
+bug,Refund email shows wrong amount,,medium,,ziad@example.com,,

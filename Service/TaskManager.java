@@ -6,11 +6,21 @@ class TaskManager {
     private final UserRepository users;
     private final ProjectRepository projects;
     private final TaskRepository tasks;
+    private final CsvImporter csvImporter;
+    private final ReportRepository reports;
 
-    TaskManager(UserRepository users, ProjectRepository projects, TaskRepository tasks) {
+    TaskManager(UserRepository users, ProjectRepository projects, TaskRepository tasks,
+                ImportRepository imports, ReportRepository reports) {
         this.users = users;
         this.projects = projects;
         this.tasks = tasks;
+        this.csvImporter = new CsvImporter(users, projects, imports);
+        this.reports = reports;
+    }
+
+    // loads every task of the CSV file into the project, all or nothing
+    public ImportResult importCsv(String filePath, String projectKey, long reporterId) {
+        return csvImporter.importFile(filePath, projectKey, reporterId);
     }
 
     public User createUser(String fullName, String email) {
@@ -57,6 +67,10 @@ class TaskManager {
         tasks.addTag(taskId, tagName);
     }
 
+    public void moveTask(long taskId, long targetProjectId) {
+        tasks.moveTask(taskId, targetProjectId);
+    }
+
     public Comment addComment(long taskId, long authorId, String body) {
         return tasks.addComment(taskId, authorId, body);
     }
@@ -73,5 +87,34 @@ class TaskManager {
 
     public List<StatusChange> findStatusHistory(long taskId) {
         return tasks.findStatusHistory(taskId);
+    }
+
+    // Part 4 reports: each one is one SQL query (see db/reports.sql)
+    public List<ProjectProgress> projectProgress() {
+        return reports.projectProgress();
+    }
+
+    public List<OverdueTask> overdueTasks() {
+        return reports.overdueTasks();
+    }
+
+    public List<TopPerson> topPeople() {
+        return reports.topPeople();
+    }
+
+    public List<MemberWithoutTasks> membersWithoutTasksNotExists() {
+        return reports.membersWithoutTasksNotExists();
+    }
+
+    public List<MemberWithoutTasks> membersWithoutTasksLeftJoin() {
+        return reports.membersWithoutTasksLeftJoin();
+    }
+
+    public List<MemberWithoutTasks> membersWithoutTasksNotIn() {
+        return reports.membersWithoutTasksNotIn();
+    }
+
+    public List<TaskTitle> tasksWithAllTags(long projectId, List<String> tagNames) {
+        return reports.tasksWithAllTags(projectId, tagNames);
     }
 }
