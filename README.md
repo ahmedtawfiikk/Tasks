@@ -46,7 +46,7 @@ The task manager becomes a multi-user, multi-project tracker stored in PostgreSQ
 | 2. Data layer (JDBC) | Done |
 | 3. Transactions | In progress |
 | 4. Reports | Done |
-| 5. Scale and indexes | Not started |
+| 5. Scale and indexes | Done |
 
 The schema, the design decisions and the ER diagram are in [docs/SCHEMA.md](docs/SCHEMA.md).
 
@@ -55,9 +55,13 @@ The schema, the design decisions and the ER diagram are in [docs/SCHEMA.md](docs
 | Path | What it is |
 |---|---|
 | `db/migrations/001_create_users.sql` … `008_create_task_status_history.sql` | One table per file. Run them in number order. |
+| `db/migrations/009_add_indexes.sql` | The Part 5 indexes |
 | `db/seed.sql` | Sample data: 6 users, 4 projects, 42 tasks, tags, comments and status history |
 | `db/reports.sql` | The five Part 4 reports, one query each, with a comment on how each works. The app reads its queries from this file. |
 | `docs/SCHEMA.md` | ER diagram, how each rule is enforced, and the design decisions |
+| `docs/INDEXES.md` | Part 5: each index, why its columns are in that order, the plans before and after, and the cost on writes |
+| `docs/explain/` | The measured queries (task list, reports 2, 3 and 5) and their full `EXPLAIN ANALYZE` output, before and after the indexes |
+| `Scale/DataGenerator.java` | Fills a separate database with 500,000 tasks |
 
 ### Set up the database from zero
 
@@ -122,7 +126,7 @@ Every rule and how it is enforced is listed in [docs/SCHEMA.md](docs/SCHEMA.md#h
 
 Compile, then run. `lib/` holds the PostgreSQL JDBC driver, the only dependency.
 ```powershell
-javac -cp "lib/*" -d out *.java Model/*.java Repository/Interfaces/*.java Repository/InMemory/*.java Repository/Postgres/*.java Service/*.java Sort/*.java Filter/*.java Import/*.java Report/*.java
+javac -cp "lib/*" -d out *.java Model/*.java Repository/Interfaces/*.java Repository/InMemory/*.java Repository/Postgres/*.java Service/*.java Sort/*.java Filter/*.java Import/*.java Report/*.java Scale/*.java
 ```
 ```powershell
 $env:STORAGE = "postgres"; java -cp "lib/*;out" Main
@@ -416,3 +420,53 @@ More cases, all checked:
 | PAY `backend,nosuchtag` | No task has all of these tags. |
 | INV `backend,urgent` | #19 only (each project has its own tags) |
 | PAY with no tag | Error: Give at least one tag |
+
+### Scale: the data generator
+
+`Scale/DataGenerator.java` fills a **separate database**, `taskmanager_big`, with a lot of data. Create it and run the migrations on it (step 4 above, with `-d taskmanager_big` added to `psql`), then:
+```powershell
+$env:PGDATABASE = "taskmanager_big"; java -cp "lib/*;out" DataGenerator generate --users 2000 --projects 50 --tasks 500000
+```
+Run it on an empty database: the emails and project keys it makes are unique.
+
+The data is realistic and skewed:
+- **Some projects are much bigger than others.** Project number *i* gets a share of 1/(*i*+1), so project 1 gets the most tasks and project 50 about 50 times fewer.
+- **About 70% of tasks are done**, 15% in progress and 15% pending.
+- **A history row for every status change.** A done task went pending → in progress → done (2 rows), a task in progress has 1 row, a pending task none. The times are in order: created, then started, then completed.
+- **0 to 5 tags per task**, from the 20 tags of its own project.
+- Each project has 10 to 30 members, one of them the owner. The reporter and the assignee are members; 1 task in 10 has no assignee. 7 tasks in 10 have a due date.
+
+**Batching and one transaction per chunk.** Users, projects, members and tags are saved first, in one transaction. The tasks are saved in chunks of 10,000: each chunk's tasks, their task tags and their history rows are 3 JDBC batches in one transaction. The members and tags of each project are kept in memory, so picking a task's assignee and tags never runs a query. `getGeneratedKeys()` gives the new task ids, which the task tags and history rows need.
+
+**Timing.** On my machine, on an empty `taskmanager_big` with only the primary keys and unique constraints:
+```
+Generated 2000 users, 50 projects, 500000 tasks, 1248549 task tags and 774990 history rows in 108 s
+```
+Checked in psql afterwards:
+
+| Check | Result |
+|---|---|
+| Status | done 70.1%, in progress 14.9%, pending 15.1% |
+| Tasks per project | smallest 2,183, biggest 111,406 |
+| History rows | 774,990 = 2 × done + 1 × in progress |
+| Overdue tasks (not done, due date passed) | 97,976 |
+
+### Indexes
+
+Migration `009_add_indexes.sql` adds 4 indexes, chosen by measuring the task list and reports 2, 3 and 5 on the 500,000-task database with `EXPLAIN ANALYZE`, before and after. Every index, why its columns are in that order, what the plan changed from and to, the indexes that didn't help and the cost on writes are explained in [docs/INDEXES.md](docs/INDEXES.md).
+
+| Query | Index | Before | After |
+|---|---|---|---|
+| Task list: biggest project, by title, page 3 | `tasks_project_title_id` | 155 ms | 0.3 ms |
+| Report 2: overdue tasks | `tasks_overdue` | 180 ms | 90 ms |
+| Report 3: top 3 per project | `tasks_done_project_assignee` | 54,839 ms | 1,197 ms |
+| Report 5: tasks with all tags | `task_tags_tag_task` | 167 ms | 90 ms |
+
+Report 2 now sorts with `ORDER BY t.due_date, t.id` instead of `days_late DESC, t.id`. It's the same order (the earliest due date is the most days late), but written on the column, so the database reads the rows already sorted from the index instead of sorting them.
+
+With all indexes in place, the 10k CSV import takes about 18% longer: 2,435 ms on average instead of 2,066 ms.
+
+An existing database gets the indexes with:
+```powershell
+psql -v ON_ERROR_STOP=1 -1 -f db/migrations/009_add_indexes.sql
+```
