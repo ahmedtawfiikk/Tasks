@@ -29,7 +29,10 @@ ORDER BY p.key;
 -- A task with no due date drops out by itself: NULL < CURRENT_DATE is never true.
 -- LEFT JOIN users, because the assignee can be NULL and that task must still show.
 -- COALESCE turns the missing name into 'Unassigned'.
--- A date minus a date is a number of days. Most late first.
+-- A date minus a date is a number of days.
+-- Most late first: the earliest due date is the most days late, so ORDER BY t.due_date gives the
+-- same order as days_late DESC. It is written on the column, not on days_late, so the database can
+-- read the rows already sorted from the index tasks_overdue (migration 009) instead of sorting them.
 SELECT p.key, t.title,
        COALESCE(u.full_name, 'Unassigned') AS assignee,
        CURRENT_DATE - t.due_date           AS days_late
@@ -37,7 +40,7 @@ FROM tasks t
 JOIN projects p ON p.id = t.project_id
 LEFT JOIN users u ON u.id = t.assignee_id
 WHERE t.status <> 'done' AND t.due_date < CURRENT_DATE
-ORDER BY days_late DESC, t.id;
+ORDER BY t.due_date, t.id;
 
 
 -- 3. Top 3 people per project
