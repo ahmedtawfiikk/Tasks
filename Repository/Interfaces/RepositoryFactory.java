@@ -10,4 +10,6 @@ interface RepositoryFactory {
     TaskRepository createTaskRepository();
 
     ImportRepository createImportRepository();
+
+    ReportRepository createReportRepository();
 }

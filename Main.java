@@ -8,7 +8,8 @@ public class Main {
         TaskManager manager = new TaskManager(repositories.createUserRepository(),
                                               repositories.createProjectRepository(),
                                               repositories.createTaskRepository(),
-                                              repositories.createImportRepository());
+                                              repositories.createImportRepository(),
+                                              repositories.createReportRepository());
         new ConsoleApp(manager, new Scanner(System.in)).run();
     }
 

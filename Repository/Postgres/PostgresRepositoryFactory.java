@@ -1,3 +1,5 @@
+import java.nio.file.Path;
+
 // Creates the PostgreSQL set of repositories. Used when STORAGE=postgres.
 // SQL_DEBUG=true prints every SQL statement.
 class PostgresRepositoryFactory implements RepositoryFactory {
@@ -22,5 +24,11 @@ class PostgresRepositoryFactory implements RepositoryFactory {
     @Override
     public ImportRepository createImportRepository() {
         return new PostgresImportRepository(database, mapper);
+    }
+
+    @Override
+    public ReportRepository createReportRepository() {
+        // the report queries are read from db/reports.sql (a path from the project folder)
+        return new PostgresReportRepository(database, new SqlFile(Path.of("db", "reports.sql")));
     }
 }

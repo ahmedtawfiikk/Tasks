@@ -26,4 +26,9 @@ class InMemoryRepositoryFactory implements RepositoryFactory {
     public ImportRepository createImportRepository() {
         return new InMemoryImportRepository();
     }
+
+    @Override
+    public ReportRepository createReportRepository() {
+        return new InMemoryReportRepository();
+    }
 }
