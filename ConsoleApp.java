@@ -1,4 +1,5 @@
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Scanner;
@@ -45,6 +46,11 @@ class ConsoleApp {
         System.out.println("11 Show task");
         System.out.println("12 Move task to another project");
         System.out.println("13 Import tasks from CSV");
+        System.out.println("14 Report: project progress");
+        System.out.println("15 Report: overdue tasks");
+        System.out.println("16 Report: top 3 people per project");
+        System.out.println("17 Report: members with no tasks");
+        System.out.println("18 Report: tasks with all given tags");
         System.out.println("0  Exit");
     }
 
@@ -63,6 +69,11 @@ class ConsoleApp {
             case "11" -> showTask();
             case "12" -> moveTask();
             case "13" -> importCsv();
+            case "14" -> projectProgress();
+            case "15" -> overdueTasks();
+            case "16" -> topPeople();
+            case "17" -> membersWithoutTasks();
+            case "18" -> tasksWithAllTags();
             default -> System.out.println("Unknown choice: " + choice);
         }
     }
@@ -155,6 +166,65 @@ class ConsoleApp {
             return;
         }
         System.out.println("Imported " + result.importedCount() + " tasks in " + millis + " ms");
+    }
+
+    // Part 4 reports: each command runs one SQL query and prints its rows
+
+    private void projectProgress() {
+        System.out.printf("%-5s %-12s %6s %6s %12s %8s %8s%n",
+                "Key", "Project", "Total", "Done", "In progress", "Pending", "% done");
+        for (ProjectProgress row : manager.projectProgress()) {
+            System.out.printf("%-5s %-12s %6d %6d %12d %8d %8s%n", row.projectKey(), row.projectName(),
+                    row.total(), row.done(), row.inProgress(), row.pending(), row.percentDone());
+        }
+    }
+
+    private void overdueTasks() {
+        List<OverdueTask> rows = manager.overdueTasks();
+        if (rows.isEmpty()) {
+            System.out.println("No overdue tasks.");
+            return;
+        }
+        System.out.printf("%-5s %-35s %-16s %9s%n", "Key", "Task", "Assignee", "Days late");
+        for (OverdueTask row : rows) {
+            System.out.printf("%-5s %-35s %-16s %9d%n", row.projectKey(), row.title(), row.assignee(), row.daysLate());
+        }
+    }
+
+    private void topPeople() {
+        System.out.printf("%-5s %-16s %10s%n", "Key", "Person", "Done tasks");
+        for (TopPerson row : manager.topPeople()) {
+            System.out.printf("%-5s %-16s %10d%n", row.projectKey(), row.fullName(), row.doneTasks());
+        }
+    }
+
+    // prints the three versions, so you can see NOT EXISTS and LEFT JOIN agree and NOT IN does not
+    private void membersWithoutTasks() {
+        printMembers("NOT EXISTS", manager.membersWithoutTasksNotExists());
+        printMembers("LEFT JOIN ... IS NULL", manager.membersWithoutTasksLeftJoin());
+        printMembers("NOT IN (wrong: a task with no assignee puts a NULL in the list)", manager.membersWithoutTasksNotIn());
+    }
+
+    private void printMembers(String version, List<MemberWithoutTasks> rows) {
+        System.out.println(version + ":");
+        if (rows.isEmpty()) {
+            System.out.println("  (none)");
+        }
+        for (MemberWithoutTasks row : rows) {
+            System.out.printf("  %-5s %s%n", row.projectKey(), row.fullName());
+        }
+    }
+
+    private void tasksWithAllTags() {
+        long projectId = projectId(ask("Project key"));
+        List<String> tagNames = Arrays.asList(ask("Tags, separated by commas (e.g. backend,urgent)").split(","));
+        List<TaskTitle> rows = manager.tasksWithAllTags(projectId, tagNames);
+        if (rows.isEmpty()) {
+            System.out.println("No task has all of these tags.");
+        }
+        for (TaskTitle row : rows) {
+            System.out.println("#" + row.id() + "  " + row.title());
+        }
     }
 
     private void comment() {
