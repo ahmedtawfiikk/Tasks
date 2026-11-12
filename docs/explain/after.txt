@@ -1,0 +1,160 @@
+==================================================================
+== Task list: the paginated task list from Part 2 (console command 9), project 1, by title, page 3
+== AFTER migration 009_add_indexes.sql
+==================================================================
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=14.71..21.70 rows=20 width=97) (actual time=0.221..0.252 rows=20 loops=1)
+   Buffers: shared hit=87
+   ->  Nested Loop Left Join  (cost=0.71..39089.48 rows=111717 width=97) (actual time=0.087..0.247 rows=60 loops=1)
+         Buffers: shared hit=87
+         ->  Index Scan using tasks_project_title_id on tasks t  (cost=0.42..36062.62 rows=111717 width=88) (actual time=0.051..0.109 rows=60 loops=1)
+               Index Cond: (project_id = 1)
+               Buffers: shared hit=24
+         ->  Memoize  (cost=0.29..0.31 rows=1 width=17) (actual time=0.002..0.002 rows=1 loops=60)
+               Cache Key: t.assignee_id
+               Cache Mode: logical
+               Hits: 38  Misses: 22  Evictions: 0  Overflows: 0  Memory Usage: 3kB
+               Buffers: shared hit=63
+               ->  Index Scan using users_pkey on users u  (cost=0.28..0.30 rows=1 width=17) (actual time=0.004..0.004 rows=1 loops=22)
+                     Index Cond: (id = t.assignee_id)
+                     Buffers: shared hit=63
+ Planning:
+   Buffers: shared hit=270
+ Planning Time: 5.852 ms
+ Execution Time: 0.332 ms
+(19 rows)
+
+
+==================================================================
+== Report 2: overdue tasks (console command 15)
+== AFTER migration 009_add_indexes.sql
+==================================================================
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join  (cost=0.86..11015.52 rows=98058 width=71) (actual time=0.128..85.521 rows=97976 loops=1)
+   Buffers: shared hit=3395
+   ->  Nested Loop  (cost=0.57..7839.64 rows=98058 width=43) (actual time=0.105..47.261 rows=97976 loops=1)
+         Buffers: shared hit=1019
+         ->  Index Only Scan using tasks_overdue on tasks t  (cost=0.42..5408.44 rows=98058 width=46) (actual time=0.085..15.253 rows=97976 loops=1)
+               Index Cond: (due_date < CURRENT_DATE)
+               Heap Fetches: 0
+               Buffers: shared hit=919
+         ->  Memoize  (cost=0.15..0.17 rows=1 width=13) (actual time=0.000..0.000 rows=1 loops=97976)
+               Cache Key: t.project_id
+               Cache Mode: logical
+               Hits: 97926  Misses: 50  Evictions: 0  Overflows: 0  Memory Usage: 6kB
+               Buffers: shared hit=100
+               ->  Index Scan using projects_pkey on projects p  (cost=0.14..0.16 rows=1 width=13) (actual time=0.001..0.001 rows=1 loops=50)
+                     Index Cond: (id = t.project_id)
+                     Buffers: shared hit=100
+   ->  Memoize  (cost=0.29..0.31 rows=1 width=17) (actual time=0.000..0.000 rows=1 loops=97976)
+         Cache Key: t.assignee_id
+         Cache Mode: logical
+         Hits: 97183  Misses: 793  Evictions: 0  Overflows: 0  Memory Usage: 99kB
+         Buffers: shared hit=2376
+         ->  Index Scan using users_pkey on users u  (cost=0.28..0.30 rows=1 width=17) (actual time=0.001..0.001 rows=1 loops=793)
+               Index Cond: (id = t.assignee_id)
+               Buffers: shared hit=2376
+ Planning:
+   Buffers: shared hit=81
+ Planning Time: 3.306 ms
+ Execution Time: 89.708 ms
+(28 rows)
+
+
+==================================================================
+== Report 3: top 3 people per project (console command 16)
+== AFTER migration 009_add_indexes.sql
+==================================================================
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=20075142.32..20075225.65 rows=33333 width=38) (actual time=1196.876..1196.882 rows=163 loops=1)
+   Sort Key: p.key, (count(t.id)) DESC, u.full_name
+   Sort Method: quicksort  Memory: 33kB
+   Buffers: shared hit=332252
+   ->  GroupAggregate  (cost=0.85..20072638.23 rows=33333 width=38) (actual time=93.120..1196.617 rows=163 loops=1)
+         Group Key: p.id, u.id
+         Filter: (count(t.id) >= COALESCE((SubPlan 1), '0'::bigint))
+         Rows Removed by Filter: 827
+         Buffers: shared hit=332249
+         ->  Merge Join  (cost=0.85..50379.04 rows=315206 width=38) (actual time=0.050..357.412 rows=315176 loops=1)
+               Merge Cond: (t.project_id = p.id)
+               Buffers: shared hit=324040
+               ->  Nested Loop  (cost=0.71..46425.95 rows=315206 width=33) (actual time=0.043..321.262 rows=315176 loops=1)
+                     Buffers: shared hit=324038
+                     ->  Index Scan using tasks_done_project_assignee on tasks t  (cost=0.42..37419.57 rows=350983 width=24) (actual time=0.025..201.798 rows=350345 loops=1)
+                           Buffers: shared hit=321662
+                     ->  Memoize  (cost=0.29..0.31 rows=1 width=17) (actual time=0.000..0.000 rows=1 loops=350345)
+                           Cache Key: t.assignee_id
+                           Cache Mode: logical
+                           Hits: 349552  Misses: 793  Evictions: 0  Overflows: 0  Memory Usage: 99kB
+                           Buffers: shared hit=2376
+                           ->  Index Scan using users_pkey on users u  (cost=0.28..0.30 rows=1 width=17) (actual time=0.002..0.002 rows=1 loops=793)
+                                 Index Cond: (id = t.assignee_id)
+                                 Buffers: shared hit=2376
+               ->  Index Scan using projects_pkey on projects p  (cost=0.14..12.89 rows=50 width=13) (actual time=0.005..0.032 rows=50 loops=1)
+                     Buffers: shared hit=2
+         SubPlan 1
+           ->  Limit  (cost=200.18..200.19 rows=1 width=16) (actual time=0.817..0.817 rows=1 loops=990)
+                 Buffers: shared hit=8209
+                 ->  Sort  (cost=200.18..202.16 rows=792 width=16) (actual time=0.816..0.816 rows=3 loops=990)
+                       Sort Key: (count(*)) DESC
+                       Sort Method: top-N heapsort  Memory: 25kB
+                       Buffers: shared hit=8209
+                       ->  GroupAggregate  (cost=0.42..189.94 rows=792 width=16) (actual time=0.046..0.812 rows=22 loops=990)
+                             Group Key: d.assignee_id
+                             Buffers: shared hit=8209
+                             ->  Index Only Scan using tasks_done_project_assignee on tasks d  (cost=0.42..150.50 rows=6304 width=8) (actual time=0.003..0.400 rows=6154 loops=990)
+                                   Index Cond: ((project_id = p.id) AND (assignee_id IS NOT NULL))
+                                   Heap Fetches: 0
+                                   Buffers: shared hit=8209
+ Planning:
+   Buffers: shared hit=20
+ Planning Time: 0.502 ms
+ Execution Time: 1197.130 ms
+(44 rows)
+
+
+==================================================================
+== Report 5: tasks with all given tags (console command 18), project 1, backend and urgent
+== AFTER migration 009_add_indexes.sql
+==================================================================
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=12796.07..12796.42 rows=139 width=26) (actual time=88.465..88.545 rows=1971 loops=1)
+   Sort Key: t.id
+   Sort Method: quicksort  Memory: 141kB
+   Buffers: shared hit=1583
+   ->  HashAggregate  (cost=12442.41..12791.12 rows=139 width=26) (actual time=84.166..88.020 rows=1971 loops=1)
+         Group Key: t.id
+         Filter: (count(*) = 2)
+         Batches: 1  Memory Usage: 4113kB
+         Rows Removed by Filter: 23976
+         Buffers: shared hit=1583
+         ->  Hash Join  (cost=6568.36..12302.93 rows=27897 width=26) (actual time=31.327..76.066 rows=27918 loops=1)
+               Hash Cond: (tt.task_id = t.id)
+               Buffers: shared hit=1583
+               ->  Nested Loop  (cost=0.43..5407.25 rows=124855 width=8) (actual time=0.047..20.372 rows=124930 loops=1)
+                     Buffers: shared hit=785
+                     ->  Seq Scan on tags g  (cost=0.00..23.00 rows=100 width=8) (actual time=0.026..0.577 rows=100 loops=1)
+                           Filter: (lower((name)::text) = ANY ('{backend,urgent}'::text[]))
+                           Rows Removed by Filter: 900
+                           Buffers: shared hit=8
+                     ->  Index Only Scan using task_tags_tag_task on task_tags tt  (cost=0.43..41.34 rows=1250 width=16) (actual time=0.010..0.130 rows=1249 loops=100)
+                           Index Cond: (tag_id = g.id)
+                           Heap Fetches: 0
+                           Buffers: shared hit=777
+               ->  Hash  (cost=5171.47..5171.47 rows=111717 width=26) (actual time=31.060..31.061 rows=111406 loops=1)
+                     Buckets: 131072  Batches: 1  Memory Usage: 7419kB
+                     Buffers: shared hit=798
+                     ->  Index Only Scan using tasks_project_title_id on tasks t  (cost=0.42..5171.47 rows=111717 width=26) (actual time=0.022..14.518 rows=111406 loops=1)
+                           Index Cond: (project_id = 1)
+                           Heap Fetches: 0
+                           Buffers: shared hit=798
+ Planning:
+   Buffers: shared hit=136
+ Planning Time: 4.569 ms
+ Execution Time: 89.912 ms
+(34 rows)
+
